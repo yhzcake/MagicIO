@@ -17,7 +17,7 @@ public class MagicIO {
     LOGGER = LoggerFactory.getLogger(MOD_ID);
   }
 
-  public MagicIO(IEventBus modBus) throws NoSuchMethodException {
+  public MagicIO(IEventBus modBus) {
     LOGGER.info("MagicIO has been initialized");
     ZhenHash.defaultMethod();
     Blocks.BLOCKS.register(modBus);
