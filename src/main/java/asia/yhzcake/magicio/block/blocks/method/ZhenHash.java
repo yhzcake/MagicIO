@@ -1,12 +1,11 @@
 package asia.yhzcake.magicio.block.blocks.method;
 
 import asia.yhzcake.magicio.MagicIO;
-
 import java.util.HashMap;
 import java.util.Map;
 
 public class ZhenHash {
-  private Map<String, Runnable> zhenMap;
+  public Map<String, Runnable> zhenMap;
 
   public ZhenHash() {
     zhenMap = new HashMap<>();

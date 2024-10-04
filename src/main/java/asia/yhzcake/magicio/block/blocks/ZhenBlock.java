@@ -22,13 +22,10 @@ public class ZhenBlock extends Block implements EntityBlock {
     return new ZhenBlockEntity(pos, state);
   }
 
-  @SuppressWarnings("unchecked")
   @Override
   public <T extends BlockEntity> BlockEntityTicker<T> getTicker(
       @NotNull Level level, @NotNull BlockState state, @NotNull BlockEntityType<T> type) {
-    return type == Blocks.ZHEN_ENTITY_BLOCK.get()
-        ? (BlockEntityTicker<T>) ZhenBlockEntity::tick
-        : null;
+    return type == Blocks.ZHEN_ENTITY_BLOCK.get() ? ZhenBlockEntity::tick : null;
   }
 }
 /*// Note: The ticker is defined in the block, not the block entity. However, it is good practice to
