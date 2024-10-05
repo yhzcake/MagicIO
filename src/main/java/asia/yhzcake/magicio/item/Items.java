@@ -12,10 +12,12 @@ import net.minecraft.world.item.ItemStack;
 import net.neoforged.neoforge.registries.DeferredRegister;
 
 public class Items {
+  // 创建创造栏标签注册器
   public static final DeferredRegister<CreativeModeTab> CREATIVE_MODE_TABS =
       DeferredRegister.create(Registries.CREATIVE_MODE_TAB, MagicIO.MOD_ID);
+  // 创建物品注册器
   public static final DeferredRegister.Items ITEMS = DeferredRegister.createItems(MagicIO.MOD_ID);
-
+  // 注册示例物品
   public static final Supplier<Item> EXAMPLE_ITEM =
       ITEMS.registerItem(
           "example_item",
@@ -25,13 +27,14 @@ public class Items {
   //  public static final Supplier<Item> EXAMPLE_ITEM1 = ITEMS.registerItem("example_item1",
   // Item::new);
   // CREATIVE_MODE_TABS is a DeferredRegister<CreativeModeTab>
-  public static final Supplier<CreativeModeTab> EXAMPLE_TAB =
+  // 注册创造物品栏
+  public static final Supplier<CreativeModeTab> MAGICIO_TAG =
       CREATIVE_MODE_TABS.register(
-          "example",
+          "MagicIO",
           () ->
               CreativeModeTab.builder()
                   // Set the title of the tab. Don't forget to add a translation!
-                  .title(Component.translatable("itemGroup." + MagicIO.MOD_ID + ".example"))
+                  .title(Component.translatable("itemGroup." + MagicIO.MOD_ID + ".items"))
                   // Set the icon of the tab.
                   .icon(() -> new ItemStack(EXAMPLE_ITEM.get()))
                   // Add your items to the tab.
@@ -44,7 +47,8 @@ public class Items {
                   .build());
   // Variant that also omits the Item::new parameter
   //  public static final Supplier<Item> EXAMPLE_ITEM2 = ITEMS.registerSimpleItem("example_item2");
-  public static final Supplier<BlockItem> EXAMPLE_BLOCK_ITEM =
+  // 注册方块物品
+  public static final Supplier<BlockItem> WIND_ZHEN_BLOCK =
       ITEMS.registerSimpleBlockItem("wind_zhen_block", Blocks.ZHEN_BLOCK, new Item.Properties());
   // Variant that omits the properties parameter:
   //  public static final Supplier<BlockItem> EXAMPLE_BLOCK_ITEM1 =

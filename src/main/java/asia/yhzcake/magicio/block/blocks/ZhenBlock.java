@@ -1,6 +1,8 @@
 package asia.yhzcake.magicio.block.blocks;
 
 import asia.yhzcake.magicio.block.Blocks;
+import asia.yhzcake.magicio.block.blocks.method.ZhenHash;
+import asia.yhzcake.magicio.block.blocks.method.windMethod;
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.Block;
@@ -17,6 +19,12 @@ public class ZhenBlock extends Block implements EntityBlock {
     super(properties);
   }
 
+  // 阵法类型注册
+  public static void registriesZhenType() {
+    ZhenHash.ZHENMETHOD.addMethod("wind", windMethod::windtick);
+  }
+
+  // 不知道为什么这么写,但是关联方块和方块实体要这么写
   @Override
   public BlockEntity newBlockEntity(@NotNull BlockPos pos, @NotNull BlockState state) {
     return new ZhenBlockEntity(pos, state);
@@ -25,7 +33,7 @@ public class ZhenBlock extends Block implements EntityBlock {
   @Override
   public <T extends BlockEntity> BlockEntityTicker<T> getTicker(
       @NotNull Level level, @NotNull BlockState state, @NotNull BlockEntityType<T> type) {
-    return type == Blocks.ZHEN_ENTITY_BLOCK.get() ? ZhenBlockEntity::tick : null;
+    return type == Blocks.ZHEN_BLOCK_ENTITY.get() ? ZhenBlockEntity::tick : null;
   }
 }
 /*// Note: The ticker is defined in the block, not the block entity. However, it is good practice to
