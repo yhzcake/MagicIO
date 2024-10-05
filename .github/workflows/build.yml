@@ -1,6 +1,6 @@
 name: Build
 
-on: [push, pull_request]
+on: [ push, pull_request, workflow_dispatch ]
 
 jobs:
   build:
@@ -18,7 +18,15 @@ jobs:
           java-version: '17'
           distribution: 'temurin'
 
-      - name: Build with Gradle
+      - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v3
-        with:
-          arguments: build
+
+      - name: Assemble the project
+        run: ./gradlew assemble
+
+      - name: Run the tests
+        run: ./gradlew test
+
+      - name: Run build in a subdirectory
+        working-directory: another-build
+        run: ./gradlew build
