@@ -4,7 +4,6 @@ import asia.yhzcake.magicio.MagicIO;
 import asia.yhzcake.magicio.block.blocks.ZhenBlock;
 import asia.yhzcake.magicio.block.blocks.ZhenBlockEntity;
 import java.util.function.Supplier;
-
 import net.minecraft.core.registries.Registries;
 import net.minecraft.world.level.block.SoundType;
 import net.minecraft.world.level.block.entity.BlockEntityType;

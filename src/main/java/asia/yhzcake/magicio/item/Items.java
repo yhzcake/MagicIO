@@ -30,7 +30,7 @@ public class Items {
   // 注册创造物品栏
   public static final Supplier<CreativeModeTab> MAGICIO_TAG =
       CREATIVE_MODE_TABS.register(
-          "MagicIO",
+          "items",
           () ->
               CreativeModeTab.builder()
                   // Set the title of the tab. Don't forget to add a translation!
