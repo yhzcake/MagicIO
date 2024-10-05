@@ -33,5 +33,5 @@ jobs:
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: Package
+          name: MagicIO-neoforge1.21-${{ GITHUB_REPOSITORY_ID }}.jar
           path: build/libs
