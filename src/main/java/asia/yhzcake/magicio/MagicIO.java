@@ -2,6 +2,7 @@ package asia.yhzcake.magicio;
 
 import asia.yhzcake.magicio.block.Blocks;
 import asia.yhzcake.magicio.block.blocks.ZhenBlock;
+import asia.yhzcake.magicio.block.blocks.ZhenTypes;
 import asia.yhzcake.magicio.item.Items;
 import net.neoforged.bus.api.IEventBus;
 import net.neoforged.fml.common.Mod;
@@ -19,6 +20,10 @@ public class MagicIO {
 
   public MagicIO(IEventBus modBus) {
     LOGGER.info("MagicIO has been initialized");
+    
+    // 初始化阵法类型
+    ZhenTypes.init();
+    
     // 注册阵法类型
     ZhenBlock.registriesZhenType();
 

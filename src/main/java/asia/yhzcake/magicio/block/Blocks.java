@@ -3,11 +3,12 @@ package asia.yhzcake.magicio.block;
 import asia.yhzcake.magicio.MagicIO;
 import asia.yhzcake.magicio.block.blocks.ZhenBlock;
 import asia.yhzcake.magicio.block.blocks.ZhenBlockEntity;
+import asia.yhzcake.magicio.block.blocks.ZhenProperties;
+import asia.yhzcake.magicio.block.blocks.ZhenTypes;
 import java.util.function.Supplier;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.world.level.block.SoundType;
 import net.minecraft.world.level.block.entity.BlockEntityType;
-import net.minecraft.world.level.block.state.BlockBehaviour;
 import net.neoforged.neoforge.registries.DeferredBlock;
 import net.neoforged.neoforge.registries.DeferredRegister;
 
@@ -22,16 +23,18 @@ public class Blocks {
           "zhen_block",
           () ->
               new ZhenBlock(
-                  BlockBehaviour.Properties.of()
+                  ZhenProperties.of()
                       .destroyTime(2.0f)
                       .explosionResistance(10.0f)
                       .sound(SoundType.GRAVEL)
-                      .lightLevel(state -> 7)));
+                      .lightLevel(state -> 7)
+                      .zhenType(ZhenTypes.WIND)));
   // 创造阵法方块实体注册器
   public static final DeferredRegister<BlockEntityType<?>> ZHEN_ENTITY =
       DeferredRegister.create(Registries.BLOCK_ENTITY_TYPE, MagicIO.MOD_ID);
   // 注册阵法方块实体
-  public static final Supplier<BlockEntityType<ZhenBlockEntity>> ZHEN_BLOCK_ENTITY =
+  @SuppressWarnings("null")
+public static final Supplier<BlockEntityType<ZhenBlockEntity>> ZHEN_BLOCK_ENTITY =
       ZHEN_ENTITY.register(
           "zhen_block_entity",
           // The block entity type, created using a builder.
