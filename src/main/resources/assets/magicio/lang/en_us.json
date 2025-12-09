@@ -1,0 +1,16 @@
+{
+  "item.magicio.test_item": "Test Item",
+  "itemGroup.magicio_tab": "Magic IO",
+
+  "block.magicio.test_block": "Test Block",
+
+  "magicio.configuration.title": "Magic IO Configs",
+  "magicio.configuration.section.magicio.common.toml": "Magic IO Configs",
+  "magicio.configuration.section.magicio.common.toml.title": "Magic IO Configs",
+  "magicio.configuration.items": "Item List",
+  "magicio.configuration.logDirtBlock": "Log Dirt Block",
+  "magicio.configuration.magicNumberIntroduction": "Magic Number Text",
+  "magicio.configuration.magicNumber": "Magic Number",
+  "block.magicio.storage_block": "Storage Block",
+  "block.magicio.zhen_block": "Zhen"
+}
