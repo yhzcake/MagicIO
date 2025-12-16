@@ -11,10 +11,8 @@ public record ZhenMethod(Level level, BlockPos pos, BlockState state, BlockEntit
 
     @Override
     public void run() {
-        ZhenType<?> type = ((ZhenBlockEntity) entity).getZhenType();
-        if (type instanceof ZhenType<?> zhenType) {
-            zhenType.executeMethod(this);
-        }
+        // 这个方法现在可以保持为空或者用于默认行为
+        // 实际的特定方法调用由ZhenType.executeMethod处理
     }
 
     public void small_sift_tick() {

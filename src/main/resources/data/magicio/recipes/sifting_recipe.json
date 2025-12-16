@@ -1,0 +1,19 @@
+{
+  "type": "small_sift_zhen",
+  "input": [
+    {
+      "item": "minecraft:coarse_dirt",
+      "count": 1
+    }
+  ],
+  "output": [
+    {
+      "loot_table": "magicio:zhen_loot"
+    },
+    {
+      "item": "minecraft:dirt",
+      "count": 1
+    }
+  ],
+  "processing_time": 100
+}

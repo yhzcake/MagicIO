@@ -2,7 +2,9 @@
   "required": true,
   "package": "com.yhzcake.magicio.mixin",
   "compatibilityLevel": "JAVA_21",
-  "mixins": [],
+  "mixins": [
+    "LootTableMixin"
+  ],
   "injectors": {
     "defaultRequire": 1
   },
