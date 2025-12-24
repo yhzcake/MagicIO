@@ -5,7 +5,7 @@ import net.minecraft.world.item.crafting.Ingredient;
 import net.minecraft.core.NonNullList;
 
 public class ZhenRecipe {
-    private final String type; // 关联的ZhenBlock类型
+    private final String type; // 关联的 ZhenBlock 类型
     private final NonNullList<Ingredient> inputs;
     private final NonNullList<ItemStack> outputs;
     private final int processingTime; // 处理时间（tick）

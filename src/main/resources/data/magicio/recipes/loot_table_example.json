@@ -1,0 +1,21 @@
+{
+  "type": "magicio:zhen_block",
+  "zhen_type": "small_sift_zhen",
+  "inputs": [
+    {
+      "item": "minecraft:diamond"
+    }
+  ],
+  "outputs": [
+    {
+      "item": "minecraft:emerald",
+      "count": 1
+    }
+  ],
+  "loot_tables": [
+    "minecraft:chests/simple_dungeon",
+    "minecraft:chests/village/village_weaponsmith"
+  ],
+  "processing_time": 300,
+  "group": "treasure_recipes"
+}

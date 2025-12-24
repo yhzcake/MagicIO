@@ -7,8 +7,8 @@ import com.yhzcake.magicio.block.zhen.ZhenTypes;
 import com.yhzcake.magicio.crafting.ZhenRecipeLoaderService;
 import com.yhzcake.magicio.crafting.ZhenRecipeManager;
 import com.yhzcake.magicio.item.ModCreativeModeTabs;
-import com.yhzcake.magicio.item.ModItemEvents;
 import com.yhzcake.magicio.item.ModItems;
+import com.yhzcake.magicio.item.crafting.ModRecipeManager;
 import com.yhzcake.magicio.utils.ModDataComponents;
 import net.neoforged.neoforge.registries.NewRegistryEvent;
 import org.slf4j.Logger;
@@ -52,6 +52,7 @@ public class MagicIO {
         ModBlockEntities.register(modEventBus);
         ZhenTypes.register(modEventBus);
         ModDataComponents.register(modEventBus);
+        ModRecipeManager.register(modEventBus);
         
         // Register ourselves for server and other game events we are interested in.
         // Note that this is necessary if and only if we want *this* class (MagicIO) to respond directly to events.

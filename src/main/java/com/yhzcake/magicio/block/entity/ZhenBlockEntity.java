@@ -121,12 +121,12 @@ public class ZhenBlockEntity extends BlockEntity implements MenuProvider {
         }
     }
 
-    // 重写saveAdditional方法以确保不保存components相关数据到NBT
+    // 重写 saveAdditional 方法以确保不保存 components 相关数据到NBT
     @Override
     protected void saveAdditional(@NotNull CompoundTag tag, HolderLookup.@NotNull Provider provider) {
         super.saveAdditional(tag, provider);
         // 只保存inventory数据，明确删除components标签
-        tag.remove("components"); // 确保删除components标签
+        tag.remove("components"); // 确保删除 components 标签
         tag.put("Inventory", inventory.serializeNBT(provider));
         
         // 保存合成进度
@@ -134,7 +134,7 @@ public class ZhenBlockEntity extends BlockEntity implements MenuProvider {
         tag.putInt("MaxProcessingTime", maxProcessingTime);
     }
 
-    // 重写loadAdditional方法以确保正确加载并清理components标签
+    // 重写 loadAdditional 方法以确保正确加载并清理 components 标签
     @Override
     public void loadAdditional(@NotNull CompoundTag tag, HolderLookup.@NotNull Provider provider) {
         super.loadAdditional(tag, provider);
@@ -151,7 +151,7 @@ public class ZhenBlockEntity extends BlockEntity implements MenuProvider {
         maxProcessingTime = tag.getInt("MaxProcessingTime");
     }
 
-    // 重写getUpdateTag方法以控制发送到客户端的数据
+    // 重写 getUpdateTag 方法以控制发送到客户端的数据
     @Override
     public @NotNull CompoundTag getUpdateTag(@NotNull HolderLookup.Provider provider) {
         // 获取标准的更新标签
@@ -203,7 +203,7 @@ public class ZhenBlockEntity extends BlockEntity implements MenuProvider {
         }
     }
 
-    // Getter方法
+    // Getter 方法
     public ZhenType<?> getZhenType() {
         return type;
     }
@@ -251,7 +251,7 @@ public class ZhenBlockEntity extends BlockEntity implements MenuProvider {
             // 获取阵法类型
             ZhenType<?> zhenType = zhenEntity.getZhenType();
             
-            // 创建ZhenMethod实例
+            // 创建 ZhenMethod 实例
             ZhenMethod method = new ZhenMethod(level, pos, state, entity);
             
             // 执行阵法类型指定的方法
@@ -318,7 +318,7 @@ public class ZhenBlockEntity extends BlockEntity implements MenuProvider {
             inputItems.add(inventory.getStackInSlot(i).copy());
         }
         
-        // 根据当前ZhenBlock的类型查找匹配的配方
+        // 根据当前 ZhenBlock 的类型查找匹配的配方
         ZhenRecipe recipe = ZhenRecipeManager.getInstance().findRecipe(type.getType(), inputItems);
         if (recipe != null) {
             // 检查是否有足够的空间开始合成

@@ -1,0 +1,20 @@
+{
+  "type": "magicio:zhen_block",
+  "zhen_type": "small_sift_zhen",
+  "inputs": [
+    {
+      "item": "minecraft:iron_ingot"
+    }
+  ],
+  "outputs": [
+    {
+      "item": "minecraft:diamond",
+      "count": 1
+    }
+  ],
+  "loot_tables": [
+    "minecraft:chests/simple_dungeon",
+    "minecraft:chests/village/village_weaponsmith"
+  ],
+  "processing_time": 200
+}
