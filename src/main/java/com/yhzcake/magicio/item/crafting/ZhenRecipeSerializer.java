@@ -10,8 +10,8 @@ import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.crafting.Ingredient;
 import net.minecraft.world.item.crafting.RecipeSerializer;
-import org.jetbrains.annotations.NotNull;
 
+@SuppressWarnings("null")
 public class ZhenRecipeSerializer implements RecipeSerializer<ZhenRecipeImpl> {
     public static final RecipeSerializer<ZhenRecipeImpl> INSTANCE = new ZhenRecipeSerializer();
 
@@ -27,12 +27,12 @@ public class ZhenRecipeSerializer implements RecipeSerializer<ZhenRecipeImpl> {
     );
     
     @Override
-    public @NotNull MapCodec<ZhenRecipeImpl> codec() {
+    public  MapCodec<ZhenRecipeImpl> codec() {
         return CODEC;
     }
 
     @Override
-    public @NotNull StreamCodec<RegistryFriendlyByteBuf, ZhenRecipeImpl> streamCodec() {
+    public  StreamCodec<RegistryFriendlyByteBuf, ZhenRecipeImpl> streamCodec() {
         // 实现网络序列化
         return StreamCodec.of(
             (buf, recipe) -> {

@@ -11,6 +11,7 @@ import net.neoforged.neoforge.registries.RegistryBuilder;
 import java.util.Objects;
 import java.util.function.Function;
 
+@SuppressWarnings("null")
 public class ZhenType<T extends ElementType> {
 
     public static final ResourceKey<Registry<ZhenType<? extends ElementType>>> ZHEN_TYPE_REGISTRY_KEY = ResourceKey.createRegistryKey(ResourceLocation.fromNamespaceAndPath(MagicIO.MOD_ID,"zhen_type"));

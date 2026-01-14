@@ -12,6 +12,7 @@ import java.util.Map;
 
 import org.slf4j.Logger;
 
+@SuppressWarnings("null")
 public class ZhenRecipeLoaderService extends SimplePreparableReloadListener<Void> {
     private static final Logger LOGGER = MagicIO.LOGGER;
     

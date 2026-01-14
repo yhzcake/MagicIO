@@ -6,6 +6,7 @@ import net.neoforged.fml.common.EventBusSubscriber;
 import net.neoforged.neoforge.capabilities.Capabilities;
 import net.neoforged.neoforge.capabilities.RegisterCapabilitiesEvent;
 
+@SuppressWarnings("null")
 @EventBusSubscriber(modid = MagicIO.MOD_ID)
 public class ModCapabilities {
     @SubscribeEvent

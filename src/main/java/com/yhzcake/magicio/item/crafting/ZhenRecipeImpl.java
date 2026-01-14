@@ -8,8 +8,8 @@ import net.minecraft.world.item.crafting.Ingredient;
 import net.minecraft.world.item.crafting.RecipeSerializer;
 import net.minecraft.world.item.crafting.RecipeType;
 import net.minecraft.world.level.Level;
-import org.jetbrains.annotations.NotNull;
 
+@SuppressWarnings("null")
 public class ZhenRecipeImpl implements ZhenRecipe{
     private final String zhenType;
     private final NonNullList<Ingredient> inputs;
@@ -52,17 +52,17 @@ public class ZhenRecipeImpl implements ZhenRecipe{
         return processingTime;
     }
     
-    public @NotNull String getGroup() {
+    public  String getGroup() {
         return group;
     }
     
     @Override
-    public @NotNull NonNullList<Ingredient> getIngredients() {
+    public  NonNullList<Ingredient> getIngredients() {
         return inputs;
     }
 
     @Override
-    public boolean matches(ZhenRecipeInput input, @NotNull Level level) {
+    public boolean matches(ZhenRecipeInput input,  Level level) {
         if (input.size() < inputs.size()) {
             return false;
         }
@@ -76,7 +76,7 @@ public class ZhenRecipeImpl implements ZhenRecipe{
     }
 
     @Override
-    public @NotNull ItemStack assemble(@NotNull ZhenRecipeInput input, HolderLookup.@NotNull Provider registries) {
+    public  ItemStack assemble( ZhenRecipeInput input, HolderLookup. Provider registries) {
         return outputs.isEmpty() ? ItemStack.EMPTY : outputs.getFirst().copy();
     }
 
@@ -86,17 +86,17 @@ public class ZhenRecipeImpl implements ZhenRecipe{
     }
 
     @Override
-    public @NotNull ItemStack getResultItem(HolderLookup.@NotNull Provider registries) {
+    public  ItemStack getResultItem(HolderLookup. Provider registries) {
         return outputs.isEmpty() ? ItemStack.EMPTY : outputs.getFirst();
     }
 
     @Override
-    public @NotNull RecipeSerializer<?> getSerializer() {
+    public  RecipeSerializer<?> getSerializer() {
         return ZhenRecipeSerializer.INSTANCE;
     }
 
     @Override
-    public @NotNull RecipeType<?> getType() {
+    public  RecipeType<?> getType() {
         return ModRecipeManager.ZHEN_RECIPE.get();
     }
 }

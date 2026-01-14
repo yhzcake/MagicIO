@@ -27,6 +27,7 @@ import net.neoforged.neoforge.common.NeoForge;
 import net.neoforged.neoforge.event.server.ServerStartingEvent;
 import net.neoforged.neoforge.event.AddReloadListenerEvent;
 
+@SuppressWarnings("null")
 // The value here should match an entry in the META-INF/neoforge.mods.toml file
 @Mod(MagicIO.MOD_ID)
 public class MagicIO {

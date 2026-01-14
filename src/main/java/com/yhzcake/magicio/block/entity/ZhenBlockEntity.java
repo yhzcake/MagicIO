@@ -25,12 +25,12 @@ import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
 import net.neoforged.neoforge.items.ItemStackHandler;
-import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.ArrayList;
 import java.util.List;
 
+@SuppressWarnings(value = {"null","unused"})
 public class ZhenBlockEntity extends BlockEntity implements MenuProvider {
 
     // Fields
@@ -76,12 +76,12 @@ public class ZhenBlockEntity extends BlockEntity implements MenuProvider {
             }
 
             @Override
-            public boolean isItemValid(int slot, @NotNull ItemStack stack) {
+            public boolean isItemValid(int slot,   ItemStack stack) {
                 return slot < inputCount;
             }
 
             @Override
-            public @NotNull ItemStack insertItem(int slot, @NotNull ItemStack stack, boolean simulate) {
+            public   ItemStack insertItem(int slot,   ItemStack stack, boolean simulate) {
                 if (slot >= inputCount) {
                     return stack;
                 }
@@ -91,7 +91,7 @@ public class ZhenBlockEntity extends BlockEntity implements MenuProvider {
             }
 
             @Override
-            public @NotNull ItemStack extractItem(int slot, int amount, boolean simulate) {
+            public   ItemStack extractItem(int slot, int amount, boolean simulate) {
                 if (slot < inputCount) {
                     inputsChanged = true;
                     return ItemStack.EMPTY;
@@ -123,7 +123,7 @@ public class ZhenBlockEntity extends BlockEntity implements MenuProvider {
 
     // 重写 saveAdditional 方法以确保不保存 components 相关数据到NBT
     @Override
-    protected void saveAdditional(@NotNull CompoundTag tag, HolderLookup.@NotNull Provider provider) {
+    protected void saveAdditional(  CompoundTag tag, HolderLookup.  Provider provider) {
         super.saveAdditional(tag, provider);
         // 只保存inventory数据，明确删除components标签
         tag.remove("components"); // 确保删除 components 标签
@@ -136,7 +136,7 @@ public class ZhenBlockEntity extends BlockEntity implements MenuProvider {
 
     // 重写 loadAdditional 方法以确保正确加载并清理 components 标签
     @Override
-    public void loadAdditional(@NotNull CompoundTag tag, HolderLookup.@NotNull Provider provider) {
+    public void loadAdditional(  CompoundTag tag, HolderLookup.  Provider provider) {
         super.loadAdditional(tag, provider);
         
         // 删除components标签（如果存在）
@@ -153,7 +153,7 @@ public class ZhenBlockEntity extends BlockEntity implements MenuProvider {
 
     // 重写 getUpdateTag 方法以控制发送到客户端的数据
     @Override
-    public @NotNull CompoundTag getUpdateTag(@NotNull HolderLookup.Provider provider) {
+    public   CompoundTag getUpdateTag(  HolderLookup.Provider provider) {
         // 获取标准的更新标签
         CompoundTag tag = new CompoundTag();
         saveAdditional(tag, provider);
@@ -162,12 +162,12 @@ public class ZhenBlockEntity extends BlockEntity implements MenuProvider {
 
     // 菜单提供者接口实现
     @Override
-    public @NotNull Component getDisplayName() {
+    public   Component getDisplayName() {
         return Component.translatable("block.magicio."+type.getType());
     }
 
     @Override
-    public @Nullable AbstractContainerMenu createMenu(int containerId, @NotNull Inventory playerInventory, @NotNull Player player) {
+    public @Nullable AbstractContainerMenu createMenu(int containerId,   Inventory playerInventory,   Player player) {
         return null;
     }
 

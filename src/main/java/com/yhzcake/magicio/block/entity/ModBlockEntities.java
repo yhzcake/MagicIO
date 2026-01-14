@@ -10,12 +10,15 @@ import net.neoforged.neoforge.registries.DeferredRegister;
 
 import java.util.function.Supplier;
 
+@SuppressWarnings("null")
 public class ModBlockEntities {
+    
     public static final DeferredRegister<BlockEntityType<?>> BLOCK_ENTITIES =
             DeferredRegister.create(BuiltInRegistries.BLOCK_ENTITY_TYPE, MagicIO.MOD_ID);
 
     public static final DeferredHolder<BlockEntityType<?>, BlockEntityType<ZhenBlockEntity>> ZHEN_BLOCK =
             BLOCK_ENTITIES.register("zhen_block", new Supplier<BlockEntityType<ZhenBlockEntity>>() {
+                
                 @Override
                 public BlockEntityType<ZhenBlockEntity> get() {
                     return BlockEntityType.Builder.of(ZhenBlockEntity::new,
@@ -23,6 +26,7 @@ public class ModBlockEntities {
                 }
             });
 
+    
     public static void register(IEventBus eventBus) {
         BLOCK_ENTITIES.register(eventBus);
     }

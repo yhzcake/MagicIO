@@ -6,6 +6,7 @@ import net.neoforged.bus.api.IEventBus;
 import net.neoforged.neoforge.registries.DeferredItem;
 import net.neoforged.neoforge.registries.DeferredRegister;
 
+@SuppressWarnings("null")
 public class ModItems {
     public static final DeferredRegister.Items ITEMS =
             DeferredRegister.createItems(MagicIO.MOD_ID);

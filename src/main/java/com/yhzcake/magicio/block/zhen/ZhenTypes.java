@@ -4,10 +4,10 @@ import com.yhzcake.magicio.MagicIO;
 import net.minecraft.resources.ResourceLocation;
 import net.neoforged.bus.api.IEventBus;
 import net.neoforged.neoforge.registries.DeferredRegister;
-import net.neoforged.neoforge.registries.NeoForgeRegistries;
 
 import java.util.function.Supplier;
 
+@SuppressWarnings("null")
 public class ZhenTypes {
     public static final DeferredRegister<ZhenType<? extends ElementType>> ZHEN_TYPES = DeferredRegister.create(ZhenType.ZHEN_TYPE_REGISTRY_KEY, MagicIO.MOD_ID);
     public static Supplier<ZhenType<ElementType>> SMALL_SIFT_ZHEN;

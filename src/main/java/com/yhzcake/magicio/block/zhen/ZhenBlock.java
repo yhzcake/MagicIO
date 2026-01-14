@@ -32,11 +32,11 @@ import net.minecraft.world.phys.HitResult;
 import net.minecraft.world.phys.Vec3;
 import net.minecraft.world.phys.shapes.CollisionContext;
 import net.minecraft.world.phys.shapes.VoxelShape;
-import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.Arrays;
 
+@SuppressWarnings("null")
 public class ZhenBlock extends BaseEntityBlock {
     public static final DirectionProperty FACING = BlockStateProperties.FACING;
     public static final DirectionProperty TURNING = DirectionProperty.create("turning",Direction.Plane.HORIZONTAL);
@@ -51,7 +51,7 @@ public class ZhenBlock extends BaseEntityBlock {
 
     // 方块基本属性和状态
     @Override
-    public @NotNull VoxelShape getShape(@NotNull BlockState state, @NotNull BlockGetter getter, @NotNull BlockPos pos, @NotNull CollisionContext context) {
+    public  VoxelShape getShape( BlockState state,  BlockGetter getter,  BlockPos pos,  CollisionContext context) {
         return switch (state.getValue(FACING)) {
             case NORTH -> Block.box(0,0,0,16,16,1);
             case SOUTH -> Block.box(0,0,15,16,16,16);
@@ -63,7 +63,7 @@ public class ZhenBlock extends BaseEntityBlock {
     }
 
     @Override
-    public BlockState getStateForPlacement(@NotNull BlockPlaceContext context) {
+    public BlockState getStateForPlacement( BlockPlaceContext context) {
         BlockState state = this.defaultBlockState().setValue(FACING, context.getClickedFace().getOpposite());
         if (context.getClickedFace() == Direction.UP || context.getClickedFace() == Direction.DOWN){
             state = state.setValue(TURNING, context.getHorizontalDirection());
@@ -77,24 +77,24 @@ public class ZhenBlock extends BaseEntityBlock {
     }
 
     @Override
-    protected @NotNull MapCodec<? extends BaseEntityBlock> codec() {
+    protected  MapCodec<? extends BaseEntityBlock> codec() {
         return CODEC;
     }
 
     @Override
-    public @NotNull RenderShape getRenderShape(@NotNull BlockState state) {
+    public  RenderShape getRenderShape( BlockState state) {
         return RenderShape.MODEL;
     }
 
     // 方块实体相关方法
     @Override
-    public @Nullable BlockEntity newBlockEntity(@NotNull BlockPos pos, @NotNull BlockState state) {
+    public @Nullable BlockEntity newBlockEntity( BlockPos pos,  BlockState state) {
         return new ZhenBlockEntity(pos, state);
     }
 
     @Override
     public <T extends BlockEntity> BlockEntityTicker<T> getTicker(
-            @NotNull Level level, @NotNull BlockState state,@NotNull BlockEntityType<T> type) {
+             Level level,  BlockState state, BlockEntityType<T> type) {
         if (type == ModBlockEntities.ZHEN_BLOCK.get()) {
             return ZhenBlockEntity::tick;
         }
@@ -103,7 +103,7 @@ public class ZhenBlock extends BaseEntityBlock {
 
     // 方块放置和移除
     @Override
-    public void setPlacedBy(@NotNull Level level, @NotNull BlockPos pos, @NotNull BlockState state, @Nullable LivingEntity placer, @NotNull ItemStack stack) {
+    public void setPlacedBy( Level level,  BlockPos pos,  BlockState state, @Nullable LivingEntity placer,  ItemStack stack) {
         super.setPlacedBy(level, pos, state, placer, stack);
         if (!level.isClientSide()) {
             BlockEntity blockEntity = level.getBlockEntity(pos);
@@ -135,7 +135,7 @@ public class ZhenBlock extends BaseEntityBlock {
     }
     
     @Override
-    public void onRemove(@NotNull BlockState state, @NotNull Level level, @NotNull BlockPos pos, @NotNull BlockState newState, boolean isMoving){
+    public void onRemove( BlockState state,  Level level,  BlockPos pos,  BlockState newState, boolean isMoving){
         if (state.getBlock() != newState.getBlock()) {
             BlockEntity blockEntity = level.getBlockEntity(pos);
             if (blockEntity instanceof ZhenBlockEntity) {
@@ -166,7 +166,7 @@ public class ZhenBlock extends BaseEntityBlock {
 
     // 玩家交互
     @Override
-    public @NotNull InteractionResult useWithoutItem(@NotNull BlockState state, @NotNull Level level, @NotNull BlockPos pos, @NotNull Player player, @NotNull BlockHitResult hitResult) {
+    public  InteractionResult useWithoutItem( BlockState state,  Level level,  BlockPos pos,  Player player,  BlockHitResult hitResult) {
         if (!level.isClientSide()){
             BlockEntity entity = level.getBlockEntity(pos);
 
@@ -185,7 +185,7 @@ public class ZhenBlock extends BaseEntityBlock {
     }
 
     @Override
-    public @NotNull ItemStack getCloneItemStack(@NotNull BlockState state, @NotNull HitResult target, @NotNull LevelReader level, @NotNull BlockPos pos, @NotNull Player player) {
+    public  ItemStack getCloneItemStack( BlockState state,  HitResult target,  LevelReader level,  BlockPos pos,  Player player) {
         ItemStack stack = super.getCloneItemStack(state, target, level, pos, player);
         BlockEntity blockEntity = level.getBlockEntity(pos);
         if (blockEntity instanceof ZhenBlockEntity be) {

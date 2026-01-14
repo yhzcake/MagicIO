@@ -1,7 +1,6 @@
 package com.yhzcake.magicio.crafting;
 
 import net.minecraft.world.item.ItemStack;
-import net.minecraft.world.item.crafting.Ingredient;
 import net.minecraft.core.NonNullList;
 
 import java.util.ArrayList;

@@ -15,6 +15,7 @@ import net.minecraft.world.level.storage.loot.parameters.LootContextParamSets;
 import java.util.List;
 import java.util.ArrayList;
 
+@SuppressWarnings("null")
 public class LootTableHelper {
     
     /**
