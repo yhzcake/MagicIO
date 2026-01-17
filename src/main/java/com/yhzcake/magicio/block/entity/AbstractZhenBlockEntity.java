@@ -1,42 +1,48 @@
 package com.yhzcake.magicio.block.entity;
 
+import com.yhzcake.magicio.block.zhen.ZhenBlock;
+import com.yhzcake.magicio.block.zhen.ZhenType;
+import com.yhzcake.magicio.block.zhen.ZhenTypes;
 import com.yhzcake.magicio.item.crafting.ZhenRecipe;
 import com.yhzcake.magicio.item.crafting.ZhenRecipeInput;
 import it.unimi.dsi.fastutil.objects.Object2IntOpenHashMap;
+import net.minecraft.client.multiplayer.chat.LoggedChatMessage.Player;
 import net.minecraft.core.BlockPos;
-import net.minecraft.core.Direction;
 import net.minecraft.core.HolderLookup;
 import net.minecraft.core.NonNullList;
 import net.minecraft.nbt.CompoundTag;
+import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.ContainerHelper;
 import net.minecraft.world.WorldlyContainer;
+import net.minecraft.world.entity.player.Inventory;
+import net.minecraft.world.inventory.AbstractContainerMenu;
 import net.minecraft.world.inventory.RecipeCraftingHolder;
 import net.minecraft.world.inventory.StackedContentsCompatible;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.crafting.RecipeManager;
 import net.minecraft.world.item.crafting.RecipeType;
+import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.entity.BaseContainerBlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
 import net.neoforged.neoforge.items.IItemHandler;
 import net.neoforged.neoforge.items.ItemStackHandler;
-
-import javax.annotation.Nonnull;
-import javax.annotation.Nullable;
+import net.minecraft.core.Direction;
+import net.minecraft.tags.TagKey;
+import net.minecraft.world.item.Item;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.stream.IntStream;
+
+import javax.annotation.Nullable;
+
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-import net.minecraft.world.Container;
-import net.minecraft.world.entity.player.Inventory;
-import net.minecraft.world.entity.player.Player;
-import net.minecraft.world.inventory.AbstractContainerMenu;
-import net.minecraft.network.chat.Component;
-
 @SuppressWarnings(value = {"null","unused"})
-public abstract class AbstractZhenBlockEntity extends BaseContainerBlockEntity implements WorldlyContainer, RecipeCraftingHolder {
+public abstract class AbstractZhenBlockEntity extends BaseContainerBlockEntity implements WorldlyContainer, RecipeCraftingHolder, StackedContentsCompatible {
 
     public static final int PROCESS_COOL_SPEED = 2;
     private final RecipeType<? extends ZhenRecipe> recipeType;
@@ -47,22 +53,15 @@ public abstract class AbstractZhenBlockEntity extends BaseContainerBlockEntity i
     // 当前正在处理的配方（nullable），由子类/抽象合成逻辑使用
     private ZhenRecipe currentRecipe;
     // 当输入槽位发生变化时设置为 true，合成逻辑读取后应重置为 false
-    protected boolean inputsChanged = false;
+    private boolean inputsChanged = false;
     
-    // 统一的 ItemStackHandler 实现
-    protected final ItemStackHandler inventoryHandler;
-    
-    // 输入/输出槽位数量
-    protected final int inputSlotCount;
-    protected final int outputSlotCount;
-    
-    /**
-     * 获取物品处理器，用于能力系统
-     */
+    private final ItemStackHandler inventoryHandler;
+    private final int inputSlotCount;
+    private final int outputSlotCount;
     public IItemHandler getInventory() {
         return this.inventoryHandler;
     }
-
+    private final ZhenType<?> type;
     /**
      * 标记输入已改变，合成逻辑会在下一次检查时响应此标记。
      */
@@ -71,123 +70,159 @@ public abstract class AbstractZhenBlockEntity extends BaseContainerBlockEntity i
     }
 
     /**
-     * 返回槽位数量（从 handler 获取）。
+     * 返回槽位数量
      */
-    protected int getInventorySize() {
+    public int getInventorySize() {
         return this.inventoryHandler.getSlots();
     }
 
     /**
-     * 读取指定槽位的物品。
+     * 读取指定槽位的物品
      */
-    protected ItemStack getStackInSlot(int slot) {
-        return this.inventoryHandler.getStackInSlot(slot);
+    public ItemStack getStackInSlot(int slot) {
+        if (this.inventoryHandler != null) return this.inventoryHandler.getStackInSlot(slot);
+        return ItemStack.EMPTY;
     }
 
     /**
-     * 写入指定槽位。
+     * 写入指定槽位
      */
-    protected void setStackInSlot(int slot, ItemStack stack) {
-        this.inventoryHandler.setStackInSlot(slot, stack);
+    public void setStackInSlot(int slot, ItemStack stack) {
+        if (this.inventoryHandler != null) this.inventoryHandler.setStackInSlot(slot, stack);
     }
 
     /**
-     * 插入物品到指定槽位。
+     * 插入物品到指定槽位
      */
-    protected ItemStack insertItem(int slot, ItemStack stack, boolean simulate) {
-        return this.inventoryHandler.insertItem(slot, stack, simulate);
+    public ItemStack insertItem(int slot, ItemStack stack, boolean simulate) {
+        if (this.inventoryHandler != null) return this.inventoryHandler.insertItem(slot, stack, simulate);
+        return stack;
     }
-
     /**
-     * 从指定槽位提取物品。
+     * 
+     * 从指定槽位提取物品
+     * 
      */
-    protected ItemStack extractItem(int slot, int amount, boolean simulate) {
-        return this.inventoryHandler.extractItem(slot, amount, simulate);
+    public ItemStack extractItem(int slot, int amount, boolean simulate) {
+        if (this.inventoryHandler != null) return this.inventoryHandler.extractItem(slot, amount, simulate);
+        return ItemStack.EMPTY;
     }
-
-    /**
-     * 检查指定槽位是否接受物品
-     */
-    protected boolean isItemValid(int slot, ItemStack stack) {
-        return this.inventoryHandler.isItemValid(slot, stack);
-    }
-
     /**
      * 获取输入槽位数量
      */
     public int getInputSlotCount() {
-        return inputSlotCount;
+        return this.inputSlotCount;
     }
-
     /**
      * 获取输出槽位数量
      */
     public int getOutputSlotCount() {
-        return outputSlotCount;
+        return this.outputSlotCount;
     }
 
     /**
      * 检查是否为输入槽位
      */
-    protected boolean isInputSlot(int slot) {
-        return slot < inputSlotCount;
+    public boolean isInputSlot(int slot) {
+        List<Integer> inputSlots = this.partitions.get("input");
+        return inputSlots != null && inputSlots.contains(slot);
     }
-
     /**
      * 检查是否为输出槽位
      */
-    protected boolean isOutputSlot(int slot) {
-        return slot >= inputSlotCount && slot < inputSlotCount + outputSlotCount;
+    public boolean isOutputSlot(int slot) {
+        List<Integer> outputSlots = this.partitions.get("output");
+        return outputSlots != null && outputSlots.contains(slot);
     }
-
     /**
-     * 获取输入物品（用于配方查找）
-     */
-    protected NonNullList<ItemStack> getInputItems() {
-        NonNullList<ItemStack> inputItems = NonNullList.create();
-        for (int i = 0; i < inputSlotCount; i++) {
-            inputItems.add(inventoryHandler.getStackInSlot(i));
+     * 获取输入物品（按分区分开的输入物品表）
+    */
+    public Map<String, NonNullList<ItemStack>> getInputs() {
+        Map<String, NonNullList<ItemStack>> inputs = new HashMap<>();
+        //遍历分区，为每个key对应的输入槽位创建NonNullList<ItemStack>并添加到inputs中
+        for (Map.Entry<String, List<Integer>> entry : this.partitions.entrySet()) {
+            String partition = entry.getKey();
+            List<Integer> slots = entry.getValue();
+            NonNullList<ItemStack> partitionInputs = NonNullList.create();
+            for (int i : slots) {
+                partitionInputs.add(this.inventoryHandler.getStackInSlot(i));
+            }
+            inputs.put(partition, partitionInputs);
         }
-        return inputItems;
+        return inputs;
     }
-
     /**
-     * 获取输出物品（用于检查空间）
+     * 获取输出物品
      */
-    protected NonNullList<ItemStack> getOutputItems() {
-        NonNullList<ItemStack> outputItems = NonNullList.create();
-        for (int i = inputSlotCount; i < inputSlotCount + outputSlotCount; i++) {
-            outputItems.add(inventoryHandler.getStackInSlot(i));
+    public NonNullList<ItemStack> getOutputs() {
+        NonNullList<ItemStack> outputs = NonNullList.create();
+        List<Integer> outputSlots = this.partitions.get("output");
+        if (outputSlots != null) {
+            for (int i : outputSlots) {
+                outputs.add(this.inventoryHandler.getStackInSlot(i));
+            }
         }
-        return outputItems;
+        return outputs;
     }
 
     /**
-     * 检查是否可以放入物品到指定输入槽位
+     * 检测槽位属于哪个分区
+     * @param slot 槽位索引
+     * @return 槽位所属分区，如果不存在则返回 null
      */
-    protected boolean canInsertItem(int slot, ItemStack stack) {
-        return isInputSlot(slot) && inventoryHandler.isItemValid(slot, stack);
+    public String getPartition(int slot) {
+        for (Map.Entry<String, List<Integer>> entry : this.partitions.entrySet()) {
+            String partition = entry.getKey();
+            List<Integer> slots = entry.getValue();
+            if (!partition.equals("input") && slots.contains(slot)) {
+                return partition;
+            }
+        }
+        return null;
     }
-
     /**
-     * 检查是否可以从指定输出槽位提取物品
+     * 检查是否可以放入物品（匹配分区和物品标签）
      */
-    protected boolean canExtractItem(int slot) {
-        return isOutputSlot(slot);
-    }
-
-    // 这里移除了原来的抽象方法定义，因为现在有具体实现
-
-    protected AbstractZhenBlockEntity(BlockPos pos, BlockState blockState, RecipeType<? extends ZhenRecipe> recipeType, int inputSlotCount, int outputSlotCount) {
-        super(ModBlockEntities.ZHEN_BLOCK.get(), pos, blockState);
-        this.recipeType = recipeType;
-        this.inputSlotCount = inputSlotCount;
-        this.outputSlotCount = outputSlotCount;
-        this.inventoryHandler = createItemHandler();
-        this.quickCheck = RecipeManager.createCheck(recipeType);
+    public boolean canInsertItem(int slot, ItemStack stack) {
+        if(isInputSlot(slot)){
+            String partition = getPartition(slot);
+            if (partition != null) {
+                List<TagKey<Item>> tags = this.partitionItemTags.get(partition);
+                if (tags != null && !tags.isEmpty()) {
+                    for (TagKey<Item> tag : tags) {
+                        if (stack.is(tag)) {
+                            return true;
+                        }
+                    }
+                } else {
+                    return true;
+                }
+            } else {
+                return true;
+            }
+        }        
+        return false;
     }
     
-    // 创建自定义的 ItemStackHandler
+    /**
+     * 检查是否可以提取物品
+     */
+    public boolean canExtractItem(int slot, ItemStack stack) {
+        return isOutputSlot(slot);
+    }
+    protected AbstractZhenBlockEntity(BlockPos pos, BlockState blockState, RecipeType<? extends ZhenRecipe> recipeType) {
+        super(ModBlockEntities.ZHEN_BLOCK.get(), pos, blockState);
+        this.quickCheck = RecipeManager.createCheck(recipeType);
+        this.recipeType = recipeType;
+        if (blockState.getBlock() instanceof ZhenBlock block) {
+            this.type = block.getType();
+        } else {
+            this.type = ZhenTypes.SMALL_SIFT_ZHEN.get();
+        }
+        this.inputSlotCount = type.getInput();
+        this.outputSlotCount = type.getOutput();
+        this.inventoryHandler = createItemHandler();
+    }
     protected ItemStackHandler createItemHandler() {
         return new ItemStackHandler(inputSlotCount + outputSlotCount) {
             @Override
@@ -198,7 +233,7 @@ public abstract class AbstractZhenBlockEntity extends BaseContainerBlockEntity i
                 }
                 setChanged();
                 if (level != null) {
-                    level.sendBlockUpdated(worldPosition, getBlockState(), getBlockState(), net.minecraft.world.level.block.Block.UPDATE_ALL);
+                    level.sendBlockUpdated(worldPosition, getBlockState(), getBlockState(), Block.UPDATE_ALL);
                 }
             }
 
@@ -231,8 +266,7 @@ public abstract class AbstractZhenBlockEntity extends BaseContainerBlockEntity i
     @Override
     protected void loadAdditional(CompoundTag tag, HolderLookup.Provider registries) {
         super.loadAdditional(tag, registries);
-        // 加载 inventory handler 的数据
-        if (tag.contains("Inventory")) {
+        if(tag.contains("Inventory")) {
             inventoryHandler.deserializeNBT(registries, tag.getCompound("Inventory"));
         }
         this.processTime = tag.getInt("ProcessTime");
@@ -249,7 +283,6 @@ public abstract class AbstractZhenBlockEntity extends BaseContainerBlockEntity i
         super.saveAdditional(tag, registries);
         tag.putInt("ProcessTime", this.processTime);
         tag.putInt("ProcessTimeTotal", this.processTimeTotal);
-        // 保存 inventory handler 的数据
         tag.put("Inventory", inventoryHandler.serializeNBT(registries));
         CompoundTag compoundTag = new CompoundTag();
         this.recipesUsed.forEach((resourceLocation, integer) -> compoundTag.putInt(resourceLocation.toString(), integer));
@@ -270,16 +303,35 @@ public abstract class AbstractZhenBlockEntity extends BaseContainerBlockEntity i
     }
 
     // 分区映射由子类在构造时或初始化时一次性安装并保持不可变
-    private Map<String, List<Integer>> partitions = Collections.emptyMap();
+    private Map<String, List<Integer>> partitions;
 
     /**
      * 安装分区映射，子类应在构造器中调用一次。安装后映射将不可变，重复调用被忽略。
      */
     public final void installPartitions(Map<String, List<Integer>> parts) {
         if (this.partitions.isEmpty() && parts != null && !parts.isEmpty()) {
+            Map<String, List<Integer>> dfPartition = new HashMap<>();
+
+            List<Integer> inputSlots = new ArrayList<>();
+            for (int i = 0; i < inputSlotCount; i++) {
+                inputSlots.add(i);
+            }
+            dfPartition.put("input",inputSlots);
+
+            List<Integer> outputSlots = new ArrayList<>();
+            for (int i = 0; i < outputSlotCount; i++) {
+                outputSlots.add(inputSlotCount + i);
+            }
+            dfPartition.put("output",outputSlots);
+            
+            dfPartition.forEach(
+                (key, value) -> parts.merge(key, value, (v1, v2) -> v1)
+            );
+
             this.partitions = Collections.unmodifiableMap(parts);
         }
     }
+
 
     /**
      * 获取分区映射（不可变）。
@@ -287,15 +339,15 @@ public abstract class AbstractZhenBlockEntity extends BaseContainerBlockEntity i
     public final Map<String, List<Integer>> getPartitions() {
         return this.partitions;
     }
-    
+
     /**
      * 检查分区是否为输入分区
      */
-    public boolean isInputPartition(String partitionName) {
-        if ("__ALL_INPUT__".equals(partitionName)) {
+    public boolean isInputPartition(String partition) {
+        if ("input".equals(partition)) {
             return true; // 整体输入槽位分区
         }
-        List<Integer> partitionSlots = this.partitions.get(partitionName);
+        List<Integer> partitionSlots = this.partitions.get(partition);
         if (partitionSlots == null || partitionSlots.isEmpty()) {
             return false;
         }
@@ -306,187 +358,173 @@ public abstract class AbstractZhenBlockEntity extends BaseContainerBlockEntity i
     /**
      * 检查分区是否为输出分区
      */
-    public boolean isOutputPartition(String partitionName) {
-        if ("__ALL_OUTPUT__".equals(partitionName)) {
+    public boolean isOutputPartition(String partition) {
+        if ("output".equals(partition)) {
             return true; // 整体输出槽位分区
         }
-        List<Integer> partitionSlots = this.partitions.get(partitionName);
+        List<Integer> partitionSlots = this.partitions.get(partition);
         if (partitionSlots == null || partitionSlots.isEmpty()) {
             return false;
         }
         // 检查分区中的槽位是否都属于输出槽位
         return partitionSlots.stream().allMatch(this::isOutputSlot);
     }
+
+    /**
+     * 检查物品能否输入到指定分区，子类override
+     */
+    public boolean canInsertItemToPartition(ItemStack stack, String partition) {
+        // 首先检查是否为输入分区
+        if (!isInputPartition(partition)) {
+            return false;
+        }
+        
+        // 检查分区的物品标签限制
+        List<TagKey<Item>> requiredTags = this.partitionItemTags.get(partition);
+        if (requiredTags != null && !requiredTags.isEmpty()) {
+            // 检查物品是否至少匹配其中一个标签
+            for (TagKey<Item> tag : requiredTags) {
+                if (stack.is(tag)) {
+                    return true;
+                }
+            }
+            // 如果指定了标签但物品不匹配任何标签，则不允许插入
+            return false;
+        }
+        
+        // 如果没有标签限制，则允许插入
+        return true;
+    }
     
     /**
-     * 便捷方法：安装默认的输入和输出分区映射
+     * 设置分区的物品标签限制
+     * @param partition 分区名称
+     * @param tags 该分区接受的物品标签列表
      */
-    public final void installDefaultPartitions() {
-        java.util.Map<String, List<Integer>> defaultPartitions = new java.util.HashMap<>();
-        
-        // 添加输入分区（使用预定义常量）
-        java.util.List<Integer> inputSlots = new java.util.ArrayList<>();
-        for (int i = 0; i < inputSlotCount; i++) {
-            inputSlots.add(i);
-        }
-        defaultPartitions.put(ALL_INPUT_SLOTS_PARTITION, inputSlots);
-        
-        // 添加输出分区（使用预定义常量）
-        java.util.List<Integer> outputSlots = new java.util.ArrayList<>();
-        for (int i = 0; i < outputSlotCount; i++) {
-            outputSlots.add(inputSlotCount + i);
-        }
-        defaultPartitions.put(ALL_OUTPUT_SLOTS_PARTITION, outputSlots);
-        
-        // 安装分区
-        installPartitions(defaultPartitions);
-    }
-
-        // 添加槽位映射字段
-    private Map<Direction, int[]> slotMappings;
-    private boolean mappingsInitialized = false;
-    
-    // 初始化槽位映射（由子类负责提供默认映射）
-    protected void initializeSlotMappings() {
-        if (!mappingsInitialized) {
-            // 初始时设置为空映射，由子类负责提供映射
-            this.slotMappings = new java.util.HashMap<>();
-            this.mappingsInitialized = true;
-        }
-    }
-    
-    // 常量定义
-    public static final String ALL_INPUT_SLOTS_PARTITION = "__ALL_INPUT__";
-    public static final String ALL_OUTPUT_SLOTS_PARTITION = "__ALL_OUTPUT__";
-    
-    // 提供统一的重载方法供子类设置面的槽位映射
-    public void setSlotForFace(Direction direction, String partitionName) {
-        if (this.slotMappings == null) {
-            initializeSlotMappings();
-        }
-        
-        // 获取分区对应的槽位
-        Map<String, List<Integer>> allPartitions = getPartitions();
-        List<Integer> partitionSlots = allPartitions.get(partitionName);
-        
-        if (partitionSlots != null && !partitionSlots.isEmpty()) {
-            // 将List<Integer>转换为int...并复用setSlotForFace方法
-            int[] slotsArray = partitionSlots.stream().mapToInt(Integer::intValue).toArray();
-            setSlotForFace(direction, slotsArray);
+    public void setPartitionItemTags(String partition, List<TagKey<Item>> tags) {
+        if (tags != null) {
+            this.partitionItemTags.put(partition, new ArrayList<>(tags));
         } else {
-            // 如果分区不存在，检查是否为整体输入或输出槽位分区
-            if (ALL_INPUT_SLOTS_PARTITION.equals(partitionName)) {
-                int[] inputSlots = new int[inputSlotCount];
-                for (int i = 0; i < inputSlotCount; i++) {
-                    inputSlots[i] = i;
-                }
-                setSlotForFace(direction, inputSlots);
-            } else if (ALL_OUTPUT_SLOTS_PARTITION.equals(partitionName)) {
-                int[] outputSlots = new int[outputSlotCount];
-                for (int i = 0; i < outputSlotCount; i++) {
-                    outputSlots[i] = inputSlotCount + i;
-                }
-                setSlotForFace(direction, outputSlots);
-            }
+            this.partitionItemTags.remove(partition);
         }
     }
     
-    public void setSlotForFace(Direction direction, int... slotNumbers) {
-        if (this.slotMappings == null) {
-            initializeSlotMappings();
-        }
-        this.slotMappings.put(direction, slotNumbers);
+    /**
+     * 添加一个物品标签到指定分区
+     * @param partition 分区名称
+     * @param tag 要添加的物品标签
+     */
+    public void addPartitionItemTag(String partition, TagKey<Item> tag) {
+        this.partitionItemTags.computeIfAbsent(partition, k -> new ArrayList<>()).add(tag);
     }
     
+    /**
+     * 获取分区的物品标签限制
+     * @param partition 分区名称
+     * @return 该分区接受的物品标签列表
+     */
+    public List<TagKey<Item>> getPartitionItemTags(String partition) {
+        List<TagKey<Item>> tags = this.partitionItemTags.get(partition);
+        return tags != null ? new ArrayList<>(tags) : new ArrayList<TagKey<Item>>();
+    }
+    
+    /**
+     * 移除分区的物品标签限制
+     * @param partition 分区名称
+     */
+    public void removePartitionItemTags(String partition) {
+        this.partitionItemTags.remove(partition);
+    }
+    
+    // 添加槽位映射字段
+    private Map<Direction, int[]> slotMappings = new HashMap<Direction, int[]>();
+    
+    // 分区对应的物品标签映射
+    private Map<String, List<TagKey<Item>>> partitionItemTags = new HashMap<>();
+    
+    //设定面的槽位映射
 
-    
-    // 提供方法供子类添加槽位到特定面的映射
-    public void addSlotForFace(Direction direction, int... slots) {
-        if (this.slotMappings == null) {
-            initializeSlotMappings();
-        }
-        
-        // 获取当前映射并添加新槽位
-        int[] currentSlots = this.slotMappings.getOrDefault(direction, new int[0]);
-        
-        // 创建新的槽位数组，包含原有槽位和新槽位
-        int[] newSlots = new int[currentSlots.length + slots.length];
-        System.arraycopy(currentSlots, 0, newSlots, 0, currentSlots.length);
-        System.arraycopy(slots, 0, newSlots, currentSlots.length, slots.length);
-        
-        this.slotMappings.put(direction, newSlots);
+    public void setSlotsForFace(Direction side, int[] slots) {
+        this.slotMappings.put(side, slots);
     }
-    
-    // 提供方法供子类移除特定面的槽位
-    public void removeSlotsFromFace(Direction direction, int... slotsToRemove) {
-        if (this.slotMappings == null) {
-            initializeSlotMappings();
+    /**
+     * 设定面映射分区
+     */
+    public void setSlotsForFace(Direction side, String partition) {
+        List<Integer> slots = this.partitions.get(partition);
+        if (slots != null) {
+            setSlotsForFace(side, slots.stream().mapToInt(Integer::intValue).toArray());
         }
-        
-        int[] currentSlots = this.slotMappings.getOrDefault(direction, new int[0]);
-        if (currentSlots.length == 0) return;
-        
-        // 创建一个新的列表，排除要移除的槽位
-        java.util.List<Integer> remainingSlots = new java.util.ArrayList<>();
-        for (int currentSlot : currentSlots) {
-            boolean shouldRemove = false;
-            for (int slotToRemove : slotsToRemove) {
-                if (currentSlot == slotToRemove) {
-                    shouldRemove = true;
-                    break;
-                }
-            }
-            if (!shouldRemove) {
-                remainingSlots.add(currentSlot);
-            }
-        }
-        
-        // 转换回数组并更新映射
-        int[] newSlots = remainingSlots.stream().mapToInt(Integer::intValue).toArray();
-        this.slotMappings.put(direction, newSlots);
     }
-    
+    /**
+     * 添加映射到面的槽位
+    */
+    public void addSlotsForFace(Direction side, int[] slots) {
+        int[] existingSlots = this.slotMappings.get(side);
+        if (existingSlots != null) {
+            int[] newSlots = Arrays.copyOf(existingSlots, existingSlots.length + slots.length);
+            System.arraycopy(slots, 0, newSlots, existingSlots.length, slots.length);
+            this.slotMappings.put(side, newSlots);
+        } else {
+            this.slotMappings.put(side, slots);
+        }
+    }
+    /**
+     * 添加映射到面的分区
+     */
+    public void addSlotsForFace(Direction side, String partition) {
+        List<Integer> slots = this.partitions.get(partition);
+        if (slots != null) {
+            addSlotsForFace(side, slots.stream().mapToInt(Integer::intValue).toArray());
+        }
+    }
+    /**
+     * 移除映射到面的槽位
+     */
+
+    public void removeSlotsForFace(Direction side, int[] slots) {
+        int[] existingSlots = this.slotMappings.get(side);
+        if (existingSlots != null) {
+            int[] newSlots = Arrays.stream(existingSlots).filter(slot -> !IntStream.of(slots).anyMatch(s -> s == slot)).toArray();
+            this.slotMappings.put(side, newSlots);
+        }
+    }
+    /**
+     * 移除映射到面的分区
+     */
+    public void removeSlotsForFace(Direction side, String partition) {
+        List<Integer> slots = this.partitions.get(partition);
+        if (slots != null) {
+            removeSlotsForFace(side, slots.stream().mapToInt(Integer::intValue).toArray());
+        }
+    }
     @Override
     public int[] getSlotsForFace(Direction side) {
-        if (!mappingsInitialized) {
-            initializeSlotMappings();
+        if (!this.slotMappings.containsKey(side)) {
+            return null;
         }
-        // 默认情况下如果没有为该面设置槽位映射，则返回空数组，由子类负责提供默认映射
-        return this.slotMappings.getOrDefault(side, new int[0]);
+        return this.slotMappings.get(side);
     }
-
     @Override
     public boolean canPlaceItemThroughFace(int index, ItemStack stack, Direction side) {
-        if (!mappingsInitialized) {
-            initializeSlotMappings();
-        }
-        
         // 检查索引是否在允许的槽位中
         int[] allowedSlots = this.slotMappings.get(side);
         if (allowedSlots == null || allowedSlots.length == 0) {
             // 如果没有为该面定义槽位映射，返回false，由子类负责提供默认映射
             return false;
         }
+        //使用caninsertitem判断物品是否能插入到该槽位
         
-        boolean isAllowedSlot = false;
         for (int slot : allowedSlots) {
             if (slot == index) {
-                isAllowedSlot = true;
-                break;
+                return canInsertItem(index, stack);
             }
         }
-        if (!isAllowedSlot) return false;
-        
-        // 检查是否为输入槽位
-        return isInputSlot(index);
+        return false;
     }
 
     @Override
     public boolean canTakeItemThroughFace(int index, ItemStack stack, Direction side) {
-        if (!mappingsInitialized) {
-            initializeSlotMappings();
-        }
-        
         // 检查索引是否在允许的槽位中
         int[] allowedSlots = this.slotMappings.get(side);
         if (allowedSlots == null || allowedSlots.length == 0) {
@@ -494,117 +532,33 @@ public abstract class AbstractZhenBlockEntity extends BaseContainerBlockEntity i
             return false;
         }
         
-        boolean isAllowedSlot = false;
         for (int slot : allowedSlots) {
             if (slot == index) {
-                isAllowedSlot = true;
-                break;
+                return canExtractItem(index, stack);
             }
         }
-        if (!isAllowedSlot) return false;
-        
-        // 检查是否为输出槽位
-        return isOutputSlot(index);
+        return false;
     }
-    
-    // 物品分配相关方法
-    /**
-     * 根据面插入物品，允许部分插入
-     */
-    public ItemStack insertItemByFace(ItemStack stack, Direction side, boolean simulate) {
-        if (stack.isEmpty()) return ItemStack.EMPTY;
-        
-        // 获取该面允许的槽位
-        int[] accessibleSlots = getSlotsForFace(side);
-        ItemStack remainingStack = stack;
-        
-        // 只考虑输入槽位
-        for (int slot : accessibleSlots) {
-            if (isInputSlot(slot) && !remainingStack.isEmpty()) {  // 确保是输入槽位且还有物品待插入
-                ItemStack remaining = insertItem(slot, remainingStack, simulate);
-                if (remaining.isEmpty()) {
-                    return ItemStack.EMPTY;  // 完全插入
-                }
-                remainingStack = remaining;  // 更新待插入的物品
-            }
-        }
-        
-        return remainingStack;  // 返回未插入的物品
-    }
-    
 
-    
-    /**
-     * 按分区名称插入物品，允许部分插入
-     */
-    public ItemStack insertItemByPartition(ItemStack stack, String partitionName, boolean simulate) {
-        if (stack.isEmpty() || partitionName == null) return stack;
-        
-        // 获取分区对应的槽位
-        Map<String, List<Integer>> allPartitions = getPartitions();
-        List<Integer> partitionSlots = allPartitions.get(partitionName);
-        
-        if (partitionSlots == null || partitionSlots.isEmpty()) {
-            // 如果指定分区不存在，使用默认输入槽位
-            return insertItemToInputSlots(stack, simulate);
-        }
-        
-        // 将分区槽位转换为数组并复用insertItemBySlots方法
-        int[] slotsArray = partitionSlots.stream().mapToInt(Integer::intValue).toArray();
-        return insertItemBySlots(stack, slotsArray, simulate);
-    }
-    
-    /**
-     * 按分区名称插入物品，只有当能完全插入时才执行插入
-     */
-    public boolean insertItemByPartitionCompletely(ItemStack stack, String partitionName) {
-        if (stack.isEmpty() || partitionName == null) return true;
-        
-        // 检查是否能够完全插入
-        if (!canFullyInsertItemByPartition(stack, partitionName)) {
-            return false;  // 无法完全插入
-        }
-        
-        // 执行实际插入
-        ItemStack remaining = insertItemByPartition(stack, partitionName, false);
-        return remaining.isEmpty();  // 应该完全插入，没有剩余
-    }
-    
-    /**
-     * 插入物品到所有可用输入槽位
-     */
-    public ItemStack insertItemToInputSlots(ItemStack stack, boolean simulate) {
-        if (stack.isEmpty()) return ItemStack.EMPTY;
-        
-        // 首先尝试合并现有堆叠
-        ItemStack remainingStack = stack;
-        for (int i = 0; i < inputSlotCount && !remainingStack.isEmpty(); i++) {
-            remainingStack = insertItem(i, remainingStack, simulate);
-            if (remainingStack.isEmpty()) {
-                return ItemStack.EMPTY;  // 完全插入
-            }
-        }
-        
-        return remainingStack;  // 返回未插入的物品
-    }
-    
 
-    
-    /**
-     * 检查面是否可以接收物品（基于输入槽位是否可用）
-     */
-    public boolean canAcceptItemsFromFace(Direction side) {
-        int[] accessibleSlots = getSlotsForFace(side);
-        
-        // 检查是否有任何输入槽位可用
-        for (int slot : accessibleSlots) {
-            if (isInputSlot(slot)) {
-                return true; // 至少有一个输入槽位可用
-            }
-        }
-        
-        return false; // 没有输入槽位可用
-    }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
     
     /**
      * 检查是否可以按分区名称完全插入物品
@@ -868,65 +822,6 @@ public abstract class AbstractZhenBlockEntity extends BaseContainerBlockEntity i
         AllocationResult result = allocateItemsToSlots(outputStacks, minSlot, maxSlot + 1);
         return result.getRemainingItems();
     }
-    
-    /**
-     * 按槽位数组插入物品，允许部分插入
-     */
-    private ItemStack insertItemBySlots(ItemStack stack, int[] slots, boolean simulate) {
-        if (stack.isEmpty()) return ItemStack.EMPTY;
-        
-        ItemStack remainingStack = stack;
-        
-        // 遍历指定槽位，尝试插入
-        for (int slot : slots) {
-            if (isInputSlot(slot) && !remainingStack.isEmpty()) {  // 确保是输入槽位且还有物品待插入
-                ItemStack remaining = insertItem(slot, remainingStack, simulate);
-                if (remaining.isEmpty()) {
-                    return ItemStack.EMPTY;  // 完全插入
-                }
-                remainingStack = remaining;  // 更新待插入的物品
-            }
-        }
-        
-        return remainingStack;  // 返回未插入的物品
-    }
-    
-    /**
-     * 检查是否可以按槽位数组完全插入物品
-     */
-    private boolean canFullyInsertItemBySlots(ItemStack stack, int[] slots) {
-        if (stack.isEmpty()) return true;
-        
-        ItemStack tempStack = stack.copy();
-        
-        // 创建临时的模拟库存来检查是否能完全插入
-        ItemStack[] tempInventory = new ItemStack[inputSlotCount + outputSlotCount];
-        for (int i = 0; i < tempInventory.length; i++) {
-            tempInventory[i] = getStackInSlot(i).copy();
-        }
-        
-        // 遍历指定槽位，尝试插入
-        for (int slot : slots) {
-            if (isInputSlot(slot) && !tempStack.isEmpty()) {
-                ItemStack existingStack = tempInventory[slot];
-                
-                if (existingStack.isEmpty()) {
-                    // 空槽位，计算能放入多少
-                    int maxFit = Math.min(tempStack.getMaxStackSize(), inventoryHandler.getSlotLimit(slot));
-                    int toInsert = Math.min(tempStack.getCount(), maxFit);
-                    tempStack.shrink(toInsert);
-                } else if (ItemStack.isSameItemSameComponents(existingStack, tempStack)) {
-                    // 同类物品，尝试合并
-                    int spaceAvailable = Math.min(existingStack.getMaxStackSize(), inventoryHandler.getSlotLimit(slot)) - existingStack.getCount();
-                    int toInsert = Math.min(tempStack.getCount(), spaceAvailable);
-                    tempStack.shrink(toInsert);
-                }
-            }
-        }
-        
-        return tempStack.isEmpty();
-    }
-    
     /**
      * 物品分配结果类
      */
