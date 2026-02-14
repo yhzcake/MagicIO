@@ -39,24 +39,6 @@ public class ZhenRecipe implements Recipe<ZhenRecipeInput> {
         return processingTime;
     }
 
-    /**
-     * 检查给定的输入是否匹配此配方
-     */
-    public boolean matches(NonNullList<ItemStack> inputItems) {
-        if (inputItems.size() < inputs.size()) {
-            return false;
-        }
-
-        // 检查每个输入槽位是否匹配配方要求
-        for (int i = 0; i < inputs.size(); i++) {
-            if (!inputs.get(i).test(inputItems.get(i))) {
-                return false;
-            }
-        }
-
-        return true;
-    }
-
     @Override
     public boolean matches(ZhenRecipeInput input, Level level) {
         if (input.size() < inputs.size()) {
@@ -94,6 +76,10 @@ public class ZhenRecipe implements Recipe<ZhenRecipeInput> {
     @Override
     public RecipeType<?> getType() {
         return ModRecipeManager.ZHEN_RECIPE.get();
+    }
+
+    public String getTypeStr() {
+        return type;
     }
 
     @Override

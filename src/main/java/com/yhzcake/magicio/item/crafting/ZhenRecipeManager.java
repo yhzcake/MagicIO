@@ -2,6 +2,7 @@ package com.yhzcake.magicio.item.crafting;
 
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.core.NonNullList;
+import net.minecraft.world.level.Level;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -33,16 +34,16 @@ public class ZhenRecipeManager {
     /**
      * 根据ZhenBlock类型和输入物品查找匹配的配方
      */
-    public ZhenRecipe findRecipe(String type, NonNullList<ItemStack> inputItems) {
+    public ZhenRecipe findRecipe(String type, NonNullList<ItemStack> inputItems, Level level) {
         for (ZhenRecipe recipe : recipes) {
             // 检查类型是否匹配
-            if (recipe.getType().equals(type) && recipe.matches(inputItems)) {
+            if (recipe.getTypeStr().equals(type) && recipe.matches(new ZhenRecipeInput(inputItems), level)) {
                 return recipe;
             }
         }
         return null;
     }
-
+    
     /**
      * 清除所有配方（用于重新加载或测试）
      */

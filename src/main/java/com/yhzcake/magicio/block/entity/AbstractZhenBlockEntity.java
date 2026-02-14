@@ -23,8 +23,10 @@ import net.minecraft.world.inventory.StackedContentsCompatible;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.crafting.RecipeManager;
 import net.minecraft.world.item.crafting.RecipeType;
+import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.entity.BaseContainerBlockEntity;
+import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
 import net.neoforged.neoforge.items.IItemHandler;
 import net.neoforged.neoforge.items.ItemStackHandler;
@@ -39,6 +41,8 @@ import javax.annotation.Nullable;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
+import net.minecraft.world.item.crafting.RecipeHolder;
 
 @SuppressWarnings(value = {"null","unused"})
 public abstract class AbstractZhenBlockEntity extends BaseContainerBlockEntity implements WorldlyContainer, RecipeCraftingHolder, StackedContentsCompatible {
@@ -134,7 +138,7 @@ public abstract class AbstractZhenBlockEntity extends BaseContainerBlockEntity i
         return outputSlots != null && outputSlots.contains(slot);
     }
     /**
-     * 获取输入物品（按分区分开的输入物品表）
+     * 获取按分区区分的输入物品表
     */
     public Map<String, NonNullList<ItemStack>> getInputs() {
         Map<String, NonNullList<ItemStack>> inputs = new HashMap<>();
@@ -150,18 +154,20 @@ public abstract class AbstractZhenBlockEntity extends BaseContainerBlockEntity i
         }
         return inputs;
     }
-    /**
-     * 获取输出物品
+    /***
+     * 获取指定分区对应的物品堆栈
+     * @param partition 分区名称
+     * @return 分区对应的物品堆栈，如果不存在则返回空NonNullList
      */
-    public NonNullList<ItemStack> getOutputs() {
-        NonNullList<ItemStack> outputs = NonNullList.create();
-        List<Integer> outputSlots = this.partitions.get("output");
-        if (outputSlots != null) {
-            for (int i : outputSlots) {
-                outputs.add(this.inventoryHandler.getStackInSlot(i));
+    public NonNullList<ItemStack> getItemsByPartition(String partition) {
+        NonNullList<ItemStack> items = NonNullList.create();
+        List<Integer> slots = this.partitions.get(partition);
+        if (slots != null) {
+            for (int i : slots) {
+                items.add(this.inventoryHandler.getStackInSlot(i));
             }
         }
-        return outputs;
+        return items;
     }
 
     /**
@@ -959,4 +965,43 @@ public abstract class AbstractZhenBlockEntity extends BaseContainerBlockEntity i
         return null;
     }
     
+    public static void tick(Level level, BlockPos pos, BlockState state, BlockEntity entity) {
+        if (entity instanceof AbstractZhenBlockEntity zhenEntity) {
+            boolean wasInputsChanged = zhenEntity.inputsChanged;
+            zhenEntity.inputsChanged = false;
+            if (wasInputsChanged) {
+                ZhenRecipe newCurrentRecipe = zhenEntity.findCurrentRecipe();
+                if (newCurrentRecipe != null) {
+                    if (zhenEntity.currentRecipe == null || newCurrentRecipe != zhenEntity.currentRecipe) {
+                        zhenEntity.currentRecipe = newCurrentRecipe;
+                        zhenEntity.processTime = 0;
+                        zhenEntity.processTimeTotal = newCurrentRecipe.getProcessingTime();
+                    }
+                    zhenEntity.continueProcessing(level);
+                } else {
+                    zhenEntity.currentRecipe = null;
+                    zhenEntity.processTime = 0;
+                    zhenEntity.processTimeTotal = 0;
+                    return;
+                }
+            }
+        }
+    }
+
+    private ZhenRecipe findCurrentRecipe() {
+        NonNullList<ItemStack> inputs = getItemsByPartition("input");
+        if (inputs.isEmpty()) return null;
+        ZhenRecipeInput recipeInput = new ZhenRecipeInput(inputs);
+        Optional<? extends RecipeHolder<? extends ZhenRecipe>> recipeHolder = this.quickCheck.getRecipeFor(recipeInput, level);
+        return recipeHolder.map(RecipeHolder::value).orElse(null);
+    }
+
+    private void continueProcessing(Level level) {
+        //判断是否还能合成，如果输出位置够则++，不够直接return
+        this.processTime++;
+        if (this.processTime >= this.processTimeTotal) {
+            //计时归零，输出绝对够，直接输出
+        }
+    }
+
 }

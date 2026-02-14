@@ -322,7 +322,7 @@ public class ZhenBlockEntity extends BlockEntity implements MenuProvider {
         }
         
         // 根据当前 ZhenBlock 的类型查找匹配的配方
-        ZhenRecipe recipe = ZhenRecipeManager.getInstance().findRecipe(type.getType(), inputItems);
+        ZhenRecipe recipe = ZhenRecipeManager.getInstance().findRecipe(type.getType(), inputItems, level);
         if (recipe != null) {
             // 检查是否有足够的空间开始合成
             if (canFitAllOutputs(recipe.getOutputs())) {
