@@ -540,25 +540,38 @@ public abstract class AbstractZhenBlockEntity extends BaseContainerBlockEntity i
         return false;
     }
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+    public boolean canFullyInsertItemBySlots(ItemStack stack, int[] slots) {
+        if (stack.isEmpty()) return true;
+        
+        ItemStack tempStack = stack.copy();
+        
+        // 创建临时的模拟库存来检查是否能完全插入
+        ItemStack[] tempInventory = new ItemStack[inputSlotCount + outputSlotCount];
+        for (int i = 0; i < tempInventory.length; i++) {
+            tempInventory[i] = getStackInSlot(i).copy();
+        }
+        
+        // 遍历指定槽位，尝试插入
+        for (int slot : slots) {
+            if (isInputSlot(slot) && !tempStack.isEmpty()) {
+                ItemStack existingStack = tempInventory[slot];
+                
+                if (existingStack.isEmpty()) {
+                    // 空槽位，计算能放入多少
+                    int maxFit = Math.min(tempStack.getMaxStackSize(), inventoryHandler.getSlotLimit(slot));
+                    int toInsert = Math.min(tempStack.getCount(), maxFit);
+                    tempStack.shrink(toInsert);
+                } else if (ItemStack.isSameItemSameComponents(existingStack, tempStack)) {
+                    // 同类物品，尝试合并
+                    int spaceAvailable = Math.min(existingStack.getMaxStackSize(), inventoryHandler.getSlotLimit(slot)) - existingStack.getCount();
+                    int toInsert = Math.min(tempStack.getCount(), spaceAvailable);
+                    tempStack.shrink(toInsert);
+                }
+            }
+        }
+        
+        return tempStack.isEmpty();
+    }
     
     /**
      * 检查是否可以按分区名称完全插入物品
@@ -922,7 +935,6 @@ public abstract class AbstractZhenBlockEntity extends BaseContainerBlockEntity i
         return Component.literal("Zhen Block Entity");
     }
     
-    @Override
     public AbstractContainerMenu createMenu(int containerId, Inventory inventory, Player player) {
         return null; // 不支持GUI菜单
     }
