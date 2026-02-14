@@ -969,22 +969,14 @@ public abstract class AbstractZhenBlockEntity extends BaseContainerBlockEntity i
         if (entity instanceof AbstractZhenBlockEntity zhenEntity) {
             boolean wasInputsChanged = zhenEntity.inputsChanged;
             zhenEntity.inputsChanged = false;
-            if (wasInputsChanged) {
-                ZhenRecipe newCurrentRecipe = zhenEntity.findCurrentRecipe();
-                if (newCurrentRecipe != null) {
-                    if (zhenEntity.currentRecipe == null || newCurrentRecipe != zhenEntity.currentRecipe) {
-                        zhenEntity.currentRecipe = newCurrentRecipe;
-                        zhenEntity.processTime = 0;
-                        zhenEntity.processTimeTotal = newCurrentRecipe.getProcessingTime();
-                    }
-                    zhenEntity.continueProcessing(level);
-                } else {
-                    zhenEntity.currentRecipe = null;
-                    zhenEntity.processTime = 0;
-                    zhenEntity.processTimeTotal = 0;
-                    return;
-                }
+            ZhenRecipe newCurrentRecipe = zhenEntity.findCurrentRecipe();
+            if (!(newCurrentRecipe != null && zhenEntity.currentRecipe != null && newCurrentRecipe == zhenEntity.currentRecipe)) {
+                zhenEntity.currentRecipe = newCurrentRecipe;
+                zhenEntity.processTime = 0;
+                zhenEntity.processTimeTotal = newCurrentRecipe != null ? newCurrentRecipe.getProcessingTime() : 0;
             }
+            if (newCurrentRecipe != null) zhenEntity.continueProcessing(level);
+
         }
     }
 
