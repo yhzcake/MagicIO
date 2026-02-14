@@ -3,6 +3,7 @@ package com.yhzcake.magicio.block.entity;
 import com.yhzcake.magicio.block.zhen.ZhenBlock;
 import com.yhzcake.magicio.block.zhen.ZhenType;
 import com.yhzcake.magicio.block.zhen.ZhenTypes;
+import com.yhzcake.magicio.item.crafting.ModRecipeManager;
 import com.yhzcake.magicio.item.crafting.ZhenRecipe;
 import com.yhzcake.magicio.item.crafting.ZhenRecipeInput;
 import it.unimi.dsi.fastutil.objects.Object2IntOpenHashMap;
@@ -34,9 +35,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.stream.IntStream;
-
 import javax.annotation.Nullable;
-
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -50,7 +49,7 @@ public abstract class AbstractZhenBlockEntity extends BaseContainerBlockEntity i
     private final RecipeManager.CachedCheck<ZhenRecipeInput, ? extends ZhenRecipe> quickCheck;
     int processTime;
     int processTimeTotal;
-    // 当前正在处理的配方（nullable），由子类/抽象合成逻辑使用
+    // 当前正在处理的配方（nullable），由子类抽象合成逻辑使用
     private ZhenRecipe currentRecipe;
     // 当输入槽位发生变化时设置为 true，合成逻辑读取后应重置为 false
     private boolean inputsChanged = false;
@@ -139,7 +138,7 @@ public abstract class AbstractZhenBlockEntity extends BaseContainerBlockEntity i
     */
     public Map<String, NonNullList<ItemStack>> getInputs() {
         Map<String, NonNullList<ItemStack>> inputs = new HashMap<>();
-        //遍历分区，为每个key对应的输入槽位创建NonNullList<ItemStack>并添加到inputs中
+        //遍历分区，为每个key对应的输入槽位创建NonNullList<ItemStack>并添加到inputs�?
         for (Map.Entry<String, List<Integer>> entry : this.partitions.entrySet()) {
             String partition = entry.getKey();
             List<Integer> slots = entry.getValue();
@@ -210,10 +209,10 @@ public abstract class AbstractZhenBlockEntity extends BaseContainerBlockEntity i
     public boolean canExtractItem(int slot, ItemStack stack) {
         return isOutputSlot(slot);
     }
-    protected AbstractZhenBlockEntity(BlockPos pos, BlockState blockState, RecipeType<? extends ZhenRecipe> recipeType) {
+    protected AbstractZhenBlockEntity(BlockPos pos, BlockState blockState) {
         super(ModBlockEntities.ZHEN_BLOCK.get(), pos, blockState);
-        this.quickCheck = RecipeManager.createCheck(recipeType);
-        this.recipeType = recipeType;
+        this.recipeType = ModRecipeManager.ZHEN_RECIPE.get();
+        this.quickCheck = RecipeManager.createCheck(this.recipeType);
         if (blockState.getBlock() instanceof ZhenBlock block) {
             this.type = block.getType();
         } else {
@@ -442,7 +441,7 @@ public abstract class AbstractZhenBlockEntity extends BaseContainerBlockEntity i
     // 分区对应的物品标签映射
     private Map<String, List<TagKey<Item>>> partitionItemTags = new HashMap<>();
     
-    //设定面的槽位映射
+    // 设定面的槽位映射
 
     public void setSlotsForFace(Direction side, int[] slots) {
         this.slotMappings.put(side, slots);
@@ -513,7 +512,7 @@ public abstract class AbstractZhenBlockEntity extends BaseContainerBlockEntity i
             // 如果没有为该面定义槽位映射，返回false，由子类负责提供默认映射
             return false;
         }
-        //使用caninsertitem判断物品是否能插入到该槽位
+        // 使用caninsertitem判断物品是否能插入到该槽位
         
         for (int slot : allowedSlots) {
             if (slot == index) {
@@ -551,7 +550,7 @@ public abstract class AbstractZhenBlockEntity extends BaseContainerBlockEntity i
             tempInventory[i] = getStackInSlot(i).copy();
         }
         
-        // 遍历指定槽位，尝试插入
+        // 遍历指定槽位，尝试插入物品
         for (int slot : slots) {
             if (isInputSlot(slot) && !tempStack.isEmpty()) {
                 ItemStack existingStack = tempInventory[slot];
@@ -617,7 +616,7 @@ public abstract class AbstractZhenBlockEntity extends BaseContainerBlockEntity i
                 int toInsert = Math.min(tempStack.getCount(), maxFit);
                 tempStack.shrink(toInsert);
             } else if (ItemStack.isSameItemSameComponents(existingStack, tempStack)) {
-                // 同类物品，尝试合并
+                // 同类物品，尝试合�?
                 int spaceAvailable = Math.min(existingStack.getMaxStackSize(), inventoryHandler.getSlotLimit(i)) - existingStack.getCount();
                 int toInsert = Math.min(tempStack.getCount(), spaceAvailable);
                 tempStack.shrink(toInsert);
@@ -836,7 +835,7 @@ public abstract class AbstractZhenBlockEntity extends BaseContainerBlockEntity i
         return result.getRemainingItems();
     }
     /**
-     * 物品分配结果类
+     * 物品分配结果。
      */
     protected static class AllocationResult {
         private final int allocatedCount;

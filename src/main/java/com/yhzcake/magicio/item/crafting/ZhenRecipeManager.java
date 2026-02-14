@@ -1,4 +1,4 @@
-package com.yhzcake.magicio.crafting;
+package com.yhzcake.magicio.item.crafting;
 
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.core.NonNullList;

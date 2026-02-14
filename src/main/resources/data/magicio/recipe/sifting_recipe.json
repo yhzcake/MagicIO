@@ -1,0 +1,22 @@
+{
+  "type": "magicio:zhen_recipe",
+  "zhen_type": "small_sift_zhen",
+  "inputs": [
+    {
+      "item": "minecraft:coarse_dirt",
+      "count": 1
+    }
+  ],
+  "outputs": [
+    {
+      "item": "minecraft:dirt",
+      "count": 1,
+      "partition":"main"
+    },
+    {
+      "loot_table": "magicio:zhen_loot",
+      "partition":"loot"
+    }
+  ],
+  "processing_time": 100
+}

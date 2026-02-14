@@ -1,4 +1,4 @@
-package com.yhzcake.magicio.crafting;
+package com.yhzcake.magicio.item.crafting;
 
 import com.yhzcake.magicio.MagicIO;
 import net.minecraft.server.packs.resources.ResourceManager;
@@ -28,9 +28,9 @@ public class ZhenRecipeLoaderService extends SimplePreparableReloadListener<Void
         // 清除现有的配方
         ZhenRecipeManager.getInstance().clearRecipes();
         
-        // 加载所有recipes目录下的配方（你希望配方在recipes目录中）
+        // 加载所有recipe目录下的配方（你希望配方在recipe目录中）
         Map<ResourceLocation, Resource> resources = resourceManager.listResources(
-            "recipes", 
+            "recipe", 
             (path) -> path.getPath().endsWith(".json") && path.getPath().contains("sift")
         );
         
@@ -44,13 +44,13 @@ public class ZhenRecipeLoaderService extends SimplePreparableReloadListener<Void
                 ZhenRecipe recipe = ZhenRecipeLoader.loadRecipeFromJson(inputStream);
                 if (recipe != null) {
                     ZhenRecipeManager.getInstance().addRecipe(recipe);
-                    LOGGER.info("成功加载配方: {}", recipe.getType());
+                    LOGGER.info("成功加载配方: {}", recipe.getRecipeType());
                 } else {
                     LOGGER.warn("无法加载配方: {}", resourceLocation);
                 }
                 inputStream.close();
             } catch (Exception e) {
-                LOGGER.error("加载配方时出错: {}", resourceLocation, e);
+                LOGGER.error("加载配方时出错 {}", resourceLocation, e);
             }
         }
         

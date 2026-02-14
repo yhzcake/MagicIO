@@ -4,8 +4,8 @@ import com.yhzcake.magicio.block.ModBlocks;
 import com.yhzcake.magicio.block.entity.ModBlockEntities;
 import com.yhzcake.magicio.block.zhen.ZhenType;
 import com.yhzcake.magicio.block.zhen.ZhenTypes;
-import com.yhzcake.magicio.crafting.ZhenRecipeLoaderService;
-import com.yhzcake.magicio.crafting.ZhenRecipeManager;
+import com.yhzcake.magicio.item.crafting.ZhenRecipeLoaderService;
+import com.yhzcake.magicio.item.crafting.ZhenRecipeManager;
 import com.yhzcake.magicio.item.ModCreativeModeTabs;
 import com.yhzcake.magicio.item.ModItems;
 import com.yhzcake.magicio.item.crafting.ModRecipeManager;
@@ -99,7 +99,7 @@ public class MagicIO {
         LOGGER.info("HELLO from server starting");
     }
     
-    // 添加这一方法，使用SubscribeEvent注解在NeoForge总线上注册
+    // 添加这一方法，使用SubscribeEvent注解在NeoForge总线上注�?
     @SubscribeEvent
     public void addReloadListeners(AddReloadListenerEvent event) {
         event.addListener(recipeLoaderService);
