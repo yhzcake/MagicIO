@@ -1,24 +1,35 @@
-MIT License
+GNU LESSER GENERAL PUBLIC LICENSE
+Version 3, 29 June 2007
 
-Copyright (c) 2023 NeoForged project
+Copyright (C) 2007 Free Software Foundation, Inc. <https://fsf.org/>
+Everyone is permitted to copy and distribute verbatim copies
+of this license document, but changing it is not allowed.
 
-This license applies to the template files as supplied by github.com/NeoForged/MDK
+This version of the GNU Lesser General Public License incorporates
+the terms and conditions of version 3 of the GNU General Public
+License, supplemented by the additional permissions set forth below.
 
+ADDITIONAL TERMS FOR THIS MINECRAFT MOD
 
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
+1. NON-COMMERCIAL USE ONLY
+This Mod, its source code, modified versions and derivative works
+**MAY NOT BE USED FOR ANY COMMERCIAL PURPOSE**, including but not limited to:
+- Selling, licensing, or monetizing the Mod
+- Including the Mod in paid mod packs, paid servers, or commercial services
+- Any use intended to generate monetary gain
 
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
+2. PERMITTED USE
+You are allowed to:
+- Use the Mod for personal non-commercial purposes
+- Modify, adapt, and create derivative works of the Mod
+- Distribute and publish modified versions non-commercially
+- Include the Mod in non-commercial mod packs
 
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
+3. COPYLEFT (LICENSE INFECTION)
+Any modified version or derivative work of this Mod must:
+- Be licensed under **LGPLv3 plus these same additional terms**
+- Make its full source code publicly available
+- Give appropriate credit to the original author
+
+The full text of the GNU LGPLv3 is available at:
+<https://www.gnu.org/licenses/lgpl-3.0.html>
