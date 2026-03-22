@@ -23,3 +23,7 @@ Additional Resources:
 ==========
 Community Documentation: https://docs.neoforged.net/  
 NeoForged Discord: https://discord.neoforged.net/
+
+License: GNU LGPLv3
+==========
+Non-commercial use only, modifications allowed under same license
