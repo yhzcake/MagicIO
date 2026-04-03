@@ -1,0 +1,84 @@
+allprojects {
+    repositories {
+        def aliyunPublic = 'https://maven.aliyun.com/repository/public'
+        def aliyunCentral = 'https://maven.aliyun.com/repository/central'
+        def aliyunGradlePlugin = 'https://maven.aliyun.com/repository/gradle-plugin'
+        def aliyunGoogle = 'https://maven.aliyun.com/repository/google'
+        def aliyunJcenter = 'https://maven.aliyun.com/repository/jcenter'
+        def aliyunReleases = 'https://maven.aliyun.com/repository/releases'
+        def aliyunSpring = 'https://maven.aliyun.com/repository/spring'
+        def aliyunSpringPlugin = 'https://maven.aliyun.com/repository/spring-plugin'
+        
+        all { ArtifactRepository repo ->
+            if (repo instanceof MavenArtifactRepository) {
+                def url = repo.url.toString()
+                if (url.startsWith('https://repo1.maven.org/maven2/') || 
+                    url.startsWith('https://repo.maven.apache.org/maven2/')) {
+                    project.logger.lifecycle "Repository ${repo.url} replaced by ${aliyunCentral}"
+                    remove repo
+                }
+            }
+        }
+        
+        maven { url aliyunPublic }
+        maven { url aliyunCentral }
+        maven { url aliyunGradlePlugin }
+        maven { url aliyunGoogle }
+        maven { url aliyunJcenter }
+        maven { url aliyunReleases }
+        maven { url aliyunSpring }
+        maven { url aliyunSpringPlugin }
+        mavenCentral()
+        maven { url 'https://maven.neoforged.net/releases' }
+        maven { url 'https://maven.minecraftforge.net/' }
+        maven { url 'https://libraries.minecraft.net/' }
+    }
+}
+
+gradle.allprojects { project ->
+    project.buildscript {
+        repositories {
+            def aliyunPublic = 'https://maven.aliyun.com/repository/public'
+            def aliyunCentral = 'https://maven.aliyun.com/repository/central'
+            def aliyunGradlePlugin = 'https://maven.aliyun.com/repository/gradle-plugin'
+            def aliyunGoogle = 'https://maven.aliyun.com/repository/google'
+            def aliyunJcenter = 'https://maven.aliyun.com/repository/jcenter'
+            def aliyunReleases = 'https://maven.aliyun.com/repository/releases'
+            
+            all { ArtifactRepository repo ->
+                if (repo instanceof MavenArtifactRepository) {
+                    def url = repo.url.toString()
+                    if (url.startsWith('https://repo1.maven.org/maven2/') || 
+                        url.startsWith('https://repo.maven.apache.org/maven2/')) {
+                        project.logger.lifecycle "Repository ${repo.url} replaced by ${aliyunCentral}"
+                        remove repo
+                    }
+                }
+            }
+            
+            maven { url aliyunPublic }
+            maven { url aliyunCentral }
+            maven { url aliyunGradlePlugin }
+            maven { url aliyunGoogle }
+            maven { url aliyunJcenter }
+            maven { url aliyunReleases }
+            mavenCentral()
+            maven { url 'https://maven.neoforged.net/releases' }
+            maven { url 'https://maven.minecraftforge.net/' }
+            maven { url 'https://libraries.minecraft.net/' }
+        }
+    }
+}
+
+settingsEvaluated { settings ->
+    settings.pluginManagement {
+        repositories {
+            def mavenAliyunPublic = 'https://maven.aliyun.com/repository/public'
+            def mavenAliyunGradlePlugin = 'https://maven.aliyun.com/repository/gradle-plugin'
+            
+            maven { url mavenAliyunPublic }
+            maven { url mavenAliyunGradlePlugin }
+            gradlePluginPortal()
+        }
+    }
+}

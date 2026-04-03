@@ -18,7 +18,16 @@ version = mod_version
 group = mod_group_id
 
 repositories {
-    // Add here additional repositories if required by some of the dependencies below.
+    maven { url 'https://maven.aliyun.com/repository/public' }
+    maven { url 'https://maven.aliyun.com/repository/central' }
+    maven { url 'https://maven.aliyun.com/repository/gradle-plugin' }
+    maven { url 'https://maven.aliyun.com/repository/google' }
+    maven { url 'https://maven.aliyun.com/repository/jcenter' }
+    maven { url 'https://maven.aliyun.com/repository/releases' }
+    mavenCentral()
+    maven { url 'https://maven.neoforged.net/releases' }
+    maven { url 'https://maven.minecraftforge.net/' }
+    maven { url 'https://libraries.minecraft.net/' }
 }
 
 base {
