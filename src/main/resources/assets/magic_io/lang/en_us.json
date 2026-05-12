@@ -1,0 +1,12 @@
+{
+  "itemGroup.magic_io": "MagicIO Tab",
+  "block.magic_io.example_block": "Example Block",
+  "item.magic_io.example_item": "Example Item",
+  "magic_io.configuration.title": "MagicIO Configs",
+  "magic_io.configuration.section.magic_io.common.toml": "MagicIO Configs",
+  "magic_io.configuration.section.magic_io.common.toml.title": "MagicIO Configs",
+  "magic_io.configuration.items": "Item List",
+  "magic_io.configuration.logDirtBlock": "Log Dirt Block",
+  "magic_io.configuration.magicNumberIntroduction": "Magic Number Text",
+  "magic_io.configuration.magicNumber": "Magic Number"
+}

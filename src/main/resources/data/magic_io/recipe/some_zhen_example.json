@@ -1,0 +1,13 @@
+{
+  "type": "some_zhen",
+  "inputs": {
+    "main_input": [{"item": "minecraft:iron_ingot"}],
+    "fuel_input": [{"item": "minecraft:coal"}]
+  },
+  "outputs": {
+    "main_output": [{"item": "minecraft:iron_block"}],
+    "byproduct_output": [{"loot_table": "minecraft:blocks/gravel"}],
+    "waste_output": [{"item": "minecraft:coal"}]
+  },
+  "processing_time": 200
+}

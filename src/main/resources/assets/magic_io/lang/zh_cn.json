@@ -1,0 +1,12 @@
+{
+  "itemGroup.magic_io": "魔法接口",
+  "block.magic_io.example_block": "示例方块",
+  "item.magic_io.example_item": "示例物品",
+  "magic_io.configuration.title": "魔法接口配置",
+  "magic_io.configuration.section.magic_io.common.toml": "魔法接口配置",
+  "magic_io.configuration.section.magic_io.common.toml.title": "魔法接口配置",
+  "magic_io.configuration.items": "物品列表",
+  "magic_io.configuration.logDirtBlock": "记录泥土方块",
+  "magic_io.configuration.magicNumberIntroduction": "魔法数字文本",
+  "magic_io.configuration.magicNumber": "魔法数字"
+}
