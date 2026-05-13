@@ -1,10 +1,12 @@
 ### Gradle ###
 .gradle
+.gradle-home
 build/
 !gradle/wrapper/gradle-wrapper.jar
 !**/src/**/build/
 ### IntelliJ IDEA ###
 .idea/
+.trae/
 *.iws
 *.iml
 *.ipr

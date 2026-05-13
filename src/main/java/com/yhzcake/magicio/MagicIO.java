@@ -5,9 +5,14 @@ import org.slf4j.Logger;
 import com.mojang.logging.LogUtils;
 import com.yhzcake.magicio.block.ModBlocks;
 import com.yhzcake.magicio.block.entity.ModBlockEntities;
+import com.yhzcake.magicio.block.zhen.ZhenType;
 import com.yhzcake.magicio.block.zhen.ZhenTypes;
 import com.yhzcake.magicio.config.Config;
 import com.yhzcake.magicio.item.ModDataComponents;
+import com.yhzcake.magicio.item.ModItems;
+import com.yhzcake.magicio.item.crafting.ModRecipeManager;
+import com.yhzcake.magicio.utils.ElementType;
+import com.yhzcake.magicio.utils.ElementTypes;
 
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.core.registries.Registries;
@@ -53,18 +58,26 @@ public class MagicIO {
             .icon(() -> EXAMPLE_ITEM.get().getDefaultInstance())
             .displayItems((parameters, output) -> {
                 output.accept(EXAMPLE_ITEM.get());
+                for (var blockItem : ModBlocks.ZHEN_BLOCK_ITEMS.values()) {
+                    output.accept(blockItem.get());
+                }
             }).build());
 
     public MagicIO(IEventBus modEventBus, net.neoforged.fml.ModContainer modContainer) {
         modEventBus.addListener(this::commonSetup);
 
         ModDataComponents.register(modEventBus);
+        modEventBus.register(ElementType.class);
+        ElementTypes.register(modEventBus);
+        modEventBus.register(ZhenType.class);
         ZhenTypes.register(modEventBus);
         ModBlocks.registerZhenBlocks(BLOCKS);
         ModBlocks.registerZhenBlockItems(ITEMS);
         BLOCKS.register(modEventBus);
         ITEMS.register(modEventBus);
         ModBlockEntities.BLOCK_ENTITIES.register(modEventBus);
+        ModItems.register(modEventBus);
+        ModRecipeManager.register(modEventBus);
         CREATIVE_MODE_TABS.register(modEventBus);
 
         NeoForge.EVENT_BUS.register(this);

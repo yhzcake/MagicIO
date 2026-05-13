@@ -12,7 +12,7 @@ public class ModItems {
             DeferredRegister.createItems(MagicIO.MOD_ID);
 
     public static final DeferredItem<Item> TEST_ITEM =
-            ITEMS.register("test_item", () -> new Item(new Item.Properties().stacksTo(1)));
+            ITEMS.registerSimpleItem("test_item", p -> p.stacksTo(1));
 
     public static void register(IEventBus eventBus) {
         ITEMS.register(eventBus);
