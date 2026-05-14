@@ -29,8 +29,8 @@ public class ZhenTypes {
         SMALL_SIFT_ZHEN = ZHEN_TYPES.register("small_sift_zhen",
                 () -> new ZhenType(ElementTypes.EARTH.get(), "small_sift_zhen",
                         new SlotPartition(Map.of(
-                                SlotZone.INPUT_ALL, range(0, 1),
-                                SlotZone.OUTPUT_ALL, range(2, 3)
+                                SlotZone.INPUT_ALL, range(0, 0),
+                                SlotZone.OUTPUT_ALL, range(1, 1)
                         )),
                         0,
                     (method) -> () -> method.small_sift_tick()));

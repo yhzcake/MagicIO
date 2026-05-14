@@ -38,8 +38,10 @@ import net.minecraft.world.entity.player.StackedItemContents;
 import net.minecraft.world.inventory.AbstractContainerMenu;
 import net.minecraft.world.inventory.RecipeCraftingHolder;
 import net.minecraft.world.inventory.StackedContentsCompatible;
+import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.crafting.Ingredient;
+import net.minecraft.world.phys.Vec3;
 import net.minecraft.world.item.crafting.RecipeHolder;
 import net.minecraft.world.item.crafting.RecipeManager;
 import net.minecraft.world.item.crafting.RecipeManager.CachedCheck;
@@ -99,8 +101,9 @@ public abstract class AbstractZhenBlockEntity extends BaseContainerBlockEntity i
 
     // ===== 面访问控制 =====
     public void initFaceAccess() {
-        addSlotsToFaceAccess(Direction.UP, SlotZone.INPUT_ALL);
+        addSlotsToFaceAccess(Direction.UP, SlotZone.DROP_OUTPUT);
         addSlotsToFaceAccess(Direction.DOWN, SlotZone.OUTPUT_ALL);
+        addSlotsToFaceAccess(Direction.Plane.HORIZONTAL, SlotZone.INPUT_ALL);
     }
 
     @Override
@@ -141,11 +144,13 @@ public abstract class AbstractZhenBlockEntity extends BaseContainerBlockEntity i
 
     public void setFaceAccess(Map<Direction, Set<Integer>> faceAccess) {
         this.faceAccess = new EnumMap<>(faceAccess);
+        this.zoneFaceAccess.clear();
     }
 
     public void setSlotsForFace(Direction direction, Set<Integer> slots) {
         if (slots == null || slots.isEmpty()) {
             faceAccess.remove(direction);
+            zoneFaceAccess.remove(direction);
         } else {
             faceAccess.put(direction, Set.copyOf(slots));
         }
@@ -153,10 +158,12 @@ public abstract class AbstractZhenBlockEntity extends BaseContainerBlockEntity i
 
     public void setSlotsForFace(Direction direction, SlotZone zone) {
         setSlotsForFace(direction, partition.getSlots(zone));
+        setZoneForFace(direction, zone.getName());
     }
 
     public void setSlotsForFace(Direction direction) {
         faceAccess.remove(direction);
+        zoneFaceAccess.remove(direction);
     }
 
     public void addSlotToFaceAccess(Direction direction, int slot) {
@@ -168,13 +175,21 @@ public abstract class AbstractZhenBlockEntity extends BaseContainerBlockEntity i
     public void addSlotsToFaceAccess(Direction direction, Set<Integer> slots) {
         if (slots == null || slots.isEmpty()) {
             faceAccess.remove(direction);
+            zoneFaceAccess.remove(direction);
         } else {
             faceAccess.put(direction, Set.copyOf(slots));
         }
     }
 
+    public void addSlotsToFaceAccess(Direction.Plane directions, SlotZone zone) {
+        for (Direction direction : directions) {
+            addSlotsToFaceAccess(direction, zone);
+        }
+    }
+
     public void addSlotsToFaceAccess(Direction direction, SlotZone zone) {
         addSlotsToFaceAccess(direction, partition.getSlots(zone));
+        setZoneForFace(direction, zone.getName());
     }
 
     public void removeSlotFromFaceAccess(Direction direction, int slot) {
@@ -182,6 +197,7 @@ public abstract class AbstractZhenBlockEntity extends BaseContainerBlockEntity i
         slots.remove(slot);
         if (slots.isEmpty()) {
             faceAccess.remove(direction);
+            zoneFaceAccess.remove(direction);
         } else {
             faceAccess.put(direction, Set.copyOf(slots));
         }
@@ -190,6 +206,7 @@ public abstract class AbstractZhenBlockEntity extends BaseContainerBlockEntity i
     public void removeSlotsFromFaceAccess(Direction direction, Set<Integer> slots) {
         if (slots == null || slots.isEmpty()) {
             faceAccess.remove(direction);
+            zoneFaceAccess.remove(direction);
         } else {
             faceAccess.put(direction, Set.copyOf(slots));
         }
@@ -197,6 +214,7 @@ public abstract class AbstractZhenBlockEntity extends BaseContainerBlockEntity i
 
     public void removeSlotsFromFaceAccess(Direction direction, SlotZone zone) {
         removeSlotsFromFaceAccess(direction, partition.getSlots(zone));
+        removeZoneFromFace(direction, zone.getName());
     }
 
     public void clearFaceAccess() {
@@ -443,21 +461,19 @@ public abstract class AbstractZhenBlockEntity extends BaseContainerBlockEntity i
                         }
                     }
                     for (Map.Entry<String, NonNullList<ItemStack>> entry : zoneOutputs.entrySet()) {
-                        if (entry.getKey().equals("DROP_OUTPUT")) {
-                            Set<String> zones = blockEntity.zoneFaceAccess.getOrDefault(Direction.DOWN, Set.of());
-                            if (zones.contains("DROP_OUTPUT")) {
-                                for (ItemStack stack : entry.getValue()) {
-                                    Block.popResourceFromFace(level, pos, Direction.DOWN, stack);
+                        if (entry.getKey().equals("drop_output")) {
+                            Direction dropDir = Direction.DOWN;
+                            for (Direction dir : Direction.values()) {
+                                if (blockEntity.zoneFaceAccess.getOrDefault(dir, Set.of()).contains("drop_output")) {
+                                    dropDir = dir;
+                                    break;
                                 }
-                            } else {
-                                for (Direction dir : Direction.values()) {
-                                    if (blockEntity.zoneFaceAccess.getOrDefault(dir, Set.of()).contains("DROP_OUTPUT")) {
-                                        for (ItemStack stack : entry.getValue()) {
-                                            Block.popResourceFromFace(level, pos, dir, stack);
-                                        }
-                                        break;
-                                    }
-                                }
+                            }
+                            Vec3 dropPos = Vec3.atCenterOf(pos.relative(dropDir));
+                            for (ItemStack stack : entry.getValue()) {
+                                ItemEntity item = new ItemEntity(level, dropPos.x, dropPos.y - 0.5, dropPos.z, stack, 0, 0, 0);
+                                item.setDefaultPickUpDelay();
+                                level.addFreshEntity(item);
                             }
                         } else {
                             SlotZone zone = blockEntity.partition.getZoneByName(entry.getKey());
@@ -486,7 +502,7 @@ public abstract class AbstractZhenBlockEntity extends BaseContainerBlockEntity i
 
     private boolean canFitZoneOutputs(Map<String, NonNullList<ItemStack>> zoneOutputs) {
         for (Map.Entry<String, NonNullList<ItemStack>> entry : zoneOutputs.entrySet()) {
-            if (entry.getKey().equals("DROP_OUTPUT")) continue;
+            if (entry.getKey().equals("drop_output")) continue;
             SlotZone zone = partition.getZoneByName(entry.getKey());
             if (zone == null) return false;
             for (ItemStack stack : entry.getValue()) {

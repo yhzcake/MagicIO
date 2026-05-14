@@ -1,5 +1,8 @@
 package com.yhzcake.magicio;
 
+import java.io.InputStream;
+import java.util.Map;
+
 import org.slf4j.Logger;
 
 import com.mojang.logging.LogUtils;
@@ -11,8 +14,14 @@ import com.yhzcake.magicio.config.Config;
 import com.yhzcake.magicio.item.ModDataComponents;
 import com.yhzcake.magicio.item.ModItems;
 import com.yhzcake.magicio.item.crafting.ModRecipeManager;
+import com.yhzcake.magicio.item.crafting.ZhenRecipe;
+import com.yhzcake.magicio.item.crafting.ZhenRecipeLoader;
+import com.yhzcake.magicio.item.crafting.ZhenRecipeManager;
 import com.yhzcake.magicio.utils.ElementType;
 import com.yhzcake.magicio.utils.ElementTypes;
+
+import net.minecraft.resources.Identifier;
+import net.minecraft.server.packs.resources.Resource;
 
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.core.registries.Registries;
@@ -105,5 +114,37 @@ public class MagicIO {
     @SubscribeEvent
     public void onServerStarting(ServerStartingEvent event) {
         LOGGER.info("HELLO from server starting");
+
+        var server = event.getServer();
+        var resourceManager = server.getResourceManager();
+
+        ZhenRecipeManager.getInstance().clearRecipes();
+
+        Map<Identifier, Resource> resources = resourceManager.listResources(
+            "recipe",
+            (path) -> path.getPath().endsWith(".json") && path.getPath().contains("sift")
+        );
+
+        for (Map.Entry<Identifier, Resource> entry : resources.entrySet()) {
+            Identifier resourceLocation = entry.getKey();
+            Resource resource = entry.getValue();
+
+            try {
+                LOGGER.info("正在加载配方: {}", resourceLocation);
+                InputStream inputStream = resource.open();
+                ZhenRecipe recipe = ZhenRecipeLoader.loadRecipeFromJson(inputStream, server);
+                if (recipe != null) {
+                    ZhenRecipeManager.getInstance().addRecipe(recipe);
+                    LOGGER.info("成功加载配方: {}", recipe.getRecipeType());
+                } else {
+                    LOGGER.warn("无法加载配方: {}", resourceLocation);
+                }
+                inputStream.close();
+            } catch (Exception e) {
+                LOGGER.error("加载配方时出错 {}", resourceLocation, e);
+            }
+        }
+
+        LOGGER.info("配方加载完成，共加载 {} 个配方", ZhenRecipeManager.getInstance().getRecipes().size());
     }
 }

@@ -1,6 +1,0 @@
-{
-  "type": "small_sift_zhen",
-  "inputs": [{"item": "minecraft:gravel"}],
-  "outputs": [{"item": "minecraft:flint"}, {"loot_table": "minecraft:gameplay/hero_of_the_village/flint_giver"}],
-  "processing_time": 100
-}

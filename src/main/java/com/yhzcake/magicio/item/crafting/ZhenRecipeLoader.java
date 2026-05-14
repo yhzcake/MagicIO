@@ -8,11 +8,10 @@ import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.storage.loot.LootParams;
 import net.minecraft.world.level.storage.loot.LootTable;
 import net.minecraft.world.level.storage.loot.parameters.LootContextParamSets;
-import net.minecraft.core.Holder;
-import net.minecraft.core.RegistryAccess;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.resources.Identifier;
+import net.minecraft.resources.ResourceKey;
 import net.minecraft.core.NonNullList;
 import net.minecraft.world.item.crafting.Ingredient;
 
@@ -25,18 +24,14 @@ import java.util.Map;
 
 public class ZhenRecipeLoader {
 
-    private static LootTable getLootTable(RegistryAccess registryAccess, Identifier lootTableId) {
-        var lootTableKey = net.minecraft.resources.ResourceKey.create(Registries.LOOT_TABLE, lootTableId);
-        var registryOpt = registryAccess.lookup(Registries.LOOT_TABLE);
-        if (registryOpt.isPresent()) {
-            return registryOpt.get().get(lootTableKey).map(Holder.Reference::value).orElse(null);
-        }
-        return null;
+    private static LootTable getLootTable(MinecraftServer server, Identifier lootTableId) {
+        var lootTableKey = ResourceKey.create(Registries.LOOT_TABLE, lootTableId);
+        return server.reloadableRegistries().getLootTable(lootTableKey);
     }
 
     public static boolean validateLootTable(MinecraftServer server, Identifier lootTableId) {
         try {
-            LootTable lootTable = getLootTable(server.registryAccess(), lootTableId);
+            LootTable lootTable = getLootTable(server, lootTableId);
             return lootTable != null && lootTable != LootTable.EMPTY;
         } catch (Exception e) {
             MagicIO.LOGGER.warn("Failed to validate loot table {}: {}", lootTableId, e.getMessage());
@@ -46,7 +41,7 @@ public class ZhenRecipeLoader {
 
     public static List<ItemStack> getItemsFromLootTable(MinecraftServer server, ServerLevel level, Identifier lootTableId) {
         try {
-            LootTable lootTable = getLootTable(server.registryAccess(), lootTableId);
+            LootTable lootTable = getLootTable(server, lootTableId);
             if (lootTable == null || lootTable == LootTable.EMPTY) {
                 return List.of();
             }
