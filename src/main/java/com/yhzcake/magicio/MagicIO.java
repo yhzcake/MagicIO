@@ -7,6 +7,7 @@ import org.slf4j.Logger;
 
 import com.mojang.logging.LogUtils;
 import com.yhzcake.magicio.block.ModBlocks;
+import com.yhzcake.magicio.block.entity.AbstractZhenBlockEntity;
 import com.yhzcake.magicio.block.entity.ModBlockEntities;
 import com.yhzcake.magicio.block.zhen.ZhenType;
 import com.yhzcake.magicio.block.zhen.ZhenTypes;
@@ -46,6 +47,9 @@ import net.neoforged.neoforge.registries.DeferredBlock;
 import net.neoforged.neoforge.registries.DeferredHolder;
 import net.neoforged.neoforge.registries.DeferredItem;
 import net.neoforged.neoforge.registries.DeferredRegister;
+import net.neoforged.neoforge.capabilities.Capabilities;
+import net.neoforged.neoforge.capabilities.RegisterCapabilitiesEvent;
+import net.neoforged.neoforge.transfer.fluid.FluidStacksResourceHandler;
 
 @Mod(MagicIO.MOD_ID)
 public class MagicIO {
@@ -92,8 +96,21 @@ public class MagicIO {
         NeoForge.EVENT_BUS.register(this);
 
         modEventBus.addListener(this::addCreative);
+        modEventBus.addListener(this::registerCapabilities);
 
         modContainer.registerConfig(ModConfig.Type.COMMON, Config.SPEC);
+    }
+
+    private void registerCapabilities(RegisterCapabilitiesEvent event) {
+        event.registerBlockEntity(
+                Capabilities.Fluid.BLOCK,
+                ModBlockEntities.ZHEN_BLOCK.get(),
+                (be, direction) -> {
+                    Integer capacity = ((AbstractZhenBlockEntity) be).getTankCapacity();
+                    if (capacity == null) return null;
+                    return new FluidStacksResourceHandler(((AbstractZhenBlockEntity) be).getTanks(), capacity);
+                }
+        );
     }
 
     private void commonSetup(FMLCommonSetupEvent event) {

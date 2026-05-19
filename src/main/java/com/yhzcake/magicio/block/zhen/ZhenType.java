@@ -19,6 +19,8 @@ import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.neoforge.registries.NewRegistryEvent;
 import net.neoforged.neoforge.registries.RegistryBuilder;
 
+import org.jspecify.annotations.Nullable;
+
 import com.yhzcake.magicio.block.entity.AbstractZhenBlockEntity;
 
 public class ZhenType {
@@ -30,13 +32,19 @@ public class ZhenType {
     private final SlotPartition partition;
     private final int level;
     private final Function<SmallSiftMethod, Runnable> tickFactory;
+    private final @Nullable Integer tankCapacity;
 
-    public ZhenType(ElementType elementType, String type, SlotPartition partition, int level, Function<SmallSiftMethod, Runnable> tickFactory) {
+    public ZhenType(ElementType elementType, String type, SlotPartition partition, int level, Function<SmallSiftMethod, Runnable> tickFactory, @Nullable Integer tankCapacity) {
         this.elementType = Objects.requireNonNull(elementType, "elementType is null");
         this.type = Objects.requireNonNull(type, "type is null");
         this.partition = Objects.requireNonNull(partition, "partition is null");
         this.level = level;
         this.tickFactory = tickFactory;
+        this.tankCapacity = tankCapacity;
+    }
+
+    public ZhenType(ElementType elementType, String type, SlotPartition partition, int level, Function<SmallSiftMethod, Runnable> tickFactory) {
+        this(elementType, type, partition, level, tickFactory, null);
     }
 
     public ElementType getElementType() {
@@ -52,11 +60,19 @@ public class ZhenType {
     }
 
     public int getInput() {
-        return partition.getSlots(SlotZone.INPUT_ALL).size();
+        return partition.getSlots(SlotZone.ITEM_INPUT_ALL).size();
     }
 
     public int getOutput() {
-        return partition.getSlots(SlotZone.OUTPUT_ALL).size();
+        return partition.getSlots(SlotZone.ITEM_OUTPUT_ALL).size();
+    }
+
+    public int getFluidInput() {
+        return partition.getTanks(SlotZone.FLUID_INPUT_ALL).size();
+    }
+
+    public int getFluidOutput() {
+        return partition.getTanks(SlotZone.FLUID_OUTPUT_ALL).size();
     }
 
     public int getLevel() {
@@ -95,5 +111,9 @@ public class ZhenType {
                 .defaultKey(Identifier.fromNamespaceAndPath(MagicIO.MOD_ID, "small_sift_zhen"))
                 .create();
         event.register(ZHEN_TYPES);
+    }
+
+    public @Nullable Integer getTankCapacity() {
+        return this.tankCapacity;
     }
 }

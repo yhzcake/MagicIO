@@ -7,12 +7,17 @@ import com.mojang.serialization.MapCodec;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
 
 import net.minecraft.core.NonNullList;
+import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.core.registries.Registries;
 import net.minecraft.network.RegistryFriendlyByteBuf;
+import net.minecraft.network.codec.ByteBufCodecs;
 import net.minecraft.network.codec.StreamCodec;
+import net.minecraft.resources.HolderSetCodec;
 import net.minecraft.resources.Identifier;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.crafting.Ingredient;
 import net.minecraft.world.item.crafting.RecipeSerializer;
+import net.neoforged.neoforge.fluids.FluidStack;
 
 @SuppressWarnings("null")
 public class ZhenRecipeSerializer {
@@ -38,14 +43,42 @@ public class ZhenRecipeSerializer {
     private static final Codec<Map<String, NonNullList<OutputEntry>>> OUTPUT_MAP_CODEC =
             Codec.unboundedMap(Codec.STRING, OUTPUT_LIST_CODEC);
 
+    private static final Codec<ZhenRecipe.FluidIngredient> FLUID_INGREDIENT_CODEC = RecordCodecBuilder.create(
+            instance -> instance.group(
+                    HolderSetCodec.create(Registries.FLUID, BuiltInRegistries.FLUID.holderByNameCodec(), false)
+                            .fieldOf("fluid").forGetter(ZhenRecipe.FluidIngredient::fluids),
+                    Codec.INT.fieldOf("amount").forGetter(ZhenRecipe.FluidIngredient::amount)
+            ).apply(instance, ZhenRecipe.FluidIngredient::new)
+    );
+
+    private static final Codec<Map<String, NonNullList<ZhenRecipe.FluidIngredient>>> FLUID_INPUT_MAP_CODEC =
+            Codec.unboundedMap(Codec.STRING, FLUID_INGREDIENT_CODEC.listOf().xmap(
+                    NonNullList::copyOf,
+                    list -> (java.util.List<ZhenRecipe.FluidIngredient>) list
+            ));
+
+    private static final Codec<Map<String, NonNullList<FluidStack>>> FLUID_OUTPUT_MAP_CODEC =
+            Codec.unboundedMap(Codec.STRING, FluidStack.CODEC.listOf().xmap(
+                    NonNullList::copyOf,
+                    list -> (java.util.List<FluidStack>) list
+            ));
+
     public static final MapCodec<ZhenRecipe> CODEC = RecordCodecBuilder.mapCodec(
             instance -> instance.group(
                     Codec.STRING.fieldOf("type").forGetter(ZhenRecipe::getRecipeType),
                     INPUT_MAP_CODEC.fieldOf("inputs").forGetter(ZhenRecipe::getZoneInputs),
                     OUTPUT_MAP_CODEC.optionalFieldOf("outputs", Map.of()).forGetter(ZhenRecipe::getZoneOutputs),
+                    FLUID_INPUT_MAP_CODEC.optionalFieldOf("fluid_inputs", Map.of()).forGetter(ZhenRecipe::getFluidZoneInputs),
+                    FLUID_OUTPUT_MAP_CODEC.optionalFieldOf("fluid_outputs", Map.of()).forGetter(ZhenRecipe::getFluidZoneOutputs),
                     Identifier.CODEC.optionalFieldOf("loot_table", (Identifier) null).forGetter(ZhenRecipe::getLootTableId),
                     Codec.INT.fieldOf("processing_time").forGetter(ZhenRecipe::getProcessingTime)
             ).apply(instance, ZhenRecipe::new)
+    );
+
+    private static final StreamCodec<RegistryFriendlyByteBuf, ZhenRecipe.FluidIngredient> FLUID_INGREDIENT_STREAM_CODEC = StreamCodec.composite(
+            ByteBufCodecs.holderSet(Registries.FLUID), ZhenRecipe.FluidIngredient::fluids,
+            ByteBufCodecs.VAR_INT, ZhenRecipe.FluidIngredient::amount,
+            ZhenRecipe.FluidIngredient::new
     );
 
     public static final StreamCodec<RegistryFriendlyByteBuf, ZhenRecipe> STREAM_CODEC = StreamCodec.of(
@@ -72,6 +105,24 @@ public class ZhenRecipeSerializer {
                         } else {
                             ItemStack.STREAM_CODEC.encode(buf, output.stack());
                         }
+                    }
+                }
+                buf.writeInt(recipe.getFluidZoneInputs().size());
+                for (Map.Entry<String, NonNullList<ZhenRecipe.FluidIngredient>> entry : recipe.getFluidZoneInputs().entrySet()) {
+                    buf.writeUtf(entry.getKey());
+                    NonNullList<ZhenRecipe.FluidIngredient> fluids = entry.getValue();
+                    buf.writeInt(fluids.size());
+                    for (ZhenRecipe.FluidIngredient fluid : fluids) {
+                        FLUID_INGREDIENT_STREAM_CODEC.encode(buf, fluid);
+                    }
+                }
+                buf.writeInt(recipe.getFluidZoneOutputs().size());
+                for (Map.Entry<String, NonNullList<FluidStack>> entry : recipe.getFluidZoneOutputs().entrySet()) {
+                    buf.writeUtf(entry.getKey());
+                    NonNullList<FluidStack> fluids = entry.getValue();
+                    buf.writeInt(fluids.size());
+                    for (FluidStack fluid : fluids) {
+                        FluidStack.OPTIONAL_STREAM_CODEC.encode(buf, fluid);
                     }
                 }
                 Identifier lootTableId = recipe.getLootTableId();
@@ -110,9 +161,31 @@ public class ZhenRecipeSerializer {
                     }
                     zoneOutputs.put(zoneName, entries);
                 }
+                int fluidInputZoneCount = buf.readInt();
+                Map<String, NonNullList<ZhenRecipe.FluidIngredient>> fluidInputs = new java.util.LinkedHashMap<>();
+                for (int i = 0; i < fluidInputZoneCount; i++) {
+                    String zoneName = buf.readUtf();
+                    int fluidCount = buf.readInt();
+                    NonNullList<ZhenRecipe.FluidIngredient> fluids = NonNullList.create();
+                    for (int j = 0; j < fluidCount; j++) {
+                        fluids.add(FLUID_INGREDIENT_STREAM_CODEC.decode(buf));
+                    }
+                    fluidInputs.put(zoneName, fluids);
+                }
+                int fluidOutputZoneCount = buf.readInt();
+                Map<String, NonNullList<FluidStack>> fluidOutputs = new java.util.LinkedHashMap<>();
+                for (int i = 0; i < fluidOutputZoneCount; i++) {
+                    String zoneName = buf.readUtf();
+                    int fluidCount = buf.readInt();
+                    NonNullList<FluidStack> fluids = NonNullList.create();
+                    for (int j = 0; j < fluidCount; j++) {
+                        fluids.add(FluidStack.OPTIONAL_STREAM_CODEC.decode(buf));
+                    }
+                    fluidOutputs.put(zoneName, fluids);
+                }
                 Identifier lootTableId = buf.readBoolean() ? Identifier.STREAM_CODEC.decode(buf) : null;
                 int processingTime = buf.readInt();
-                return new ZhenRecipe(type, zoneInputs, zoneOutputs, lootTableId, processingTime);
+                return new ZhenRecipe(type, zoneInputs, zoneOutputs, fluidInputs, fluidOutputs, lootTableId, processingTime);
             }
     );
 

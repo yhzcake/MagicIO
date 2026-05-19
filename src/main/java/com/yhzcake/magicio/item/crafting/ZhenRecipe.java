@@ -7,6 +7,8 @@ import org.jspecify.annotations.Nullable;
 import com.yhzcake.magicio.block.inventory.SlotPartition;
 import com.yhzcake.magicio.block.inventory.SlotZone;
 
+import net.minecraft.core.Holder;
+import net.minecraft.core.HolderSet;
 import net.minecraft.core.NonNullList;
 import net.minecraft.resources.Identifier;
 import net.minecraft.server.level.ServerLevel;
@@ -17,6 +19,8 @@ import net.minecraft.world.item.crafting.Recipe;
 import net.minecraft.world.item.crafting.RecipeBookCategory;
 import net.minecraft.world.item.crafting.RecipeSerializer;
 import net.minecraft.world.item.crafting.RecipeType;
+import net.minecraft.world.level.material.Fluid;
+import net.neoforged.neoforge.fluids.FluidStack;
 import net.minecraft.core.HolderLookup;
 import net.minecraft.world.level.Level;
 
@@ -24,14 +28,22 @@ public class ZhenRecipe implements Recipe<ZhenRecipeInput> {
     private final String type;
     private final Map<String, NonNullList<Ingredient>> zoneInputs;
     private final Map<String, NonNullList<OutputEntry>> zoneOutputs;
+    private final Map<String, NonNullList<FluidIngredient>> fluidInputs;
+    private final Map<String, NonNullList<FluidStack>> fluidOutputs;
     @Nullable
     private final Identifier lootTableId;
     private final int processingTime;
 
     public ZhenRecipe(String type, Map<String, NonNullList<Ingredient>> zoneInputs, Map<String, NonNullList<OutputEntry>> zoneOutputs, @Nullable Identifier lootTableId, int processingTime) {
+        this(type, zoneInputs, zoneOutputs, Map.of(), Map.of(), lootTableId, processingTime);
+    }
+
+    public ZhenRecipe(String type, Map<String, NonNullList<Ingredient>> zoneInputs, Map<String, NonNullList<OutputEntry>> zoneOutputs, Map<String, NonNullList<FluidIngredient>> fluidInputs, Map<String, NonNullList<FluidStack>> fluidOutputs, @Nullable Identifier lootTableId, int processingTime) {
         this.type = type;
         this.zoneInputs = zoneInputs;
         this.zoneOutputs = zoneOutputs;
+        this.fluidInputs = fluidInputs;
+        this.fluidOutputs = fluidOutputs;
         this.lootTableId = lootTableId;
         this.processingTime = processingTime;
     }
@@ -46,6 +58,14 @@ public class ZhenRecipe implements Recipe<ZhenRecipeInput> {
 
     public Map<String, NonNullList<OutputEntry>> getZoneOutputs() {
         return zoneOutputs;
+    }
+
+    public Map<String, NonNullList<FluidIngredient>> getFluidZoneInputs() {
+        return fluidInputs;
+    }
+
+    public Map<String, NonNullList<FluidStack>> getFluidZoneOutputs() {
+        return fluidOutputs;
     }
 
     @Nullable
@@ -74,8 +94,22 @@ public class ZhenRecipe implements Recipe<ZhenRecipeInput> {
             } else {
                 NonNullList<ItemStack> lootList = NonNullList.create();
                 lootList.addAll(lootItems);
-                result.put("output_all", lootList);
+                result.put(SlotZone.ITEM_OUTPUT_ALL.getName(), lootList);
             }
+        }
+        return result;
+    }
+
+    public Map<String, NonNullList<FluidStack>> rollFluidOutput() {
+        Map<String, NonNullList<FluidStack>> result = new java.util.LinkedHashMap<>();
+        for (Map.Entry<String, NonNullList<FluidStack>> entry : fluidOutputs.entrySet()) {
+            NonNullList<FluidStack> rolled = NonNullList.create();
+            for (FluidStack fluid : entry.getValue()) {
+                if (!fluid.isEmpty()) {
+                    rolled.add(fluid.copy());
+                }
+            }
+            result.put(entry.getKey(), rolled);
         }
         return result;
     }
@@ -88,6 +122,24 @@ public class ZhenRecipe implements Recipe<ZhenRecipeInput> {
                 boolean found = false;
                 for (int slot : partition.getSlots(zone)) {
                     if (ingredient.test(allItems.get(slot))) {
+                        found = true;
+                        break;
+                    }
+                }
+                if (!found) return false;
+            }
+        }
+        return true;
+    }
+
+    public boolean matchesFluid(NonNullList<FluidStack> allTanks, SlotPartition partition) {
+        for (Map.Entry<String, NonNullList<FluidIngredient>> entry : fluidInputs.entrySet()) {
+            SlotZone zone = partition.getTankZoneByName(entry.getKey());
+            if (zone == null) return false;
+            for (FluidIngredient ingredient : entry.getValue()) {
+                boolean found = false;
+                for (int tank : partition.getTanks(zone)) {
+                    if (ingredient.test(allTanks.get(tank))) {
                         found = true;
                         break;
                     }
@@ -170,5 +222,17 @@ public class ZhenRecipe implements Recipe<ZhenRecipeInput> {
     @Override
     public RecipeBookCategory recipeBookCategory() {
         return null;
+    }
+
+    public static record FluidIngredient(HolderSet<Fluid> fluids, int amount) {
+        public boolean test(FluidStack stack) {
+            if (stack.isEmpty() || stack.getAmount() < amount) return false;
+            return fluids.contains(stack.typeHolder());
+        }
+
+        public FluidStack toFluidStack() {
+            Holder<Fluid> first = fluids.iterator().next();
+            return new FluidStack(first, amount);
+        }
     }
 }

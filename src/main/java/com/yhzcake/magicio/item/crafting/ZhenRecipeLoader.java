@@ -1,6 +1,7 @@
 package com.yhzcake.magicio.item.crafting;
 
 import com.yhzcake.magicio.MagicIO;
+import com.yhzcake.magicio.block.inventory.SlotZone;
 import com.google.gson.*;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
@@ -8,12 +9,17 @@ import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.storage.loot.LootParams;
 import net.minecraft.world.level.storage.loot.LootTable;
 import net.minecraft.world.level.storage.loot.parameters.LootContextParamSets;
+import net.minecraft.core.Holder;
+import net.minecraft.core.HolderSet;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.resources.Identifier;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.core.NonNullList;
 import net.minecraft.world.item.crafting.Ingredient;
+import net.minecraft.world.level.material.Fluid;
+import net.minecraft.tags.TagKey;
+import net.neoforged.neoforge.fluids.FluidStack;
 
 import java.io.Reader;
 import java.io.InputStreamReader;
@@ -75,7 +81,7 @@ public class ZhenRecipeLoader {
                         Identifier itemId = Identifier.parse(item);
                         BuiltInRegistries.ITEM.get(itemId).ifPresent(holder -> flat.add(Ingredient.of(holder.value())));
                     }
-                    zoneInputs.put("input_all", flat);
+                    zoneInputs.put(SlotZone.ITEM_INPUT_ALL.getName(), flat);
                 } else if (inputsElement.isJsonObject()) {
                     for (Map.Entry<String, JsonElement> entry : inputsElement.getAsJsonObject().entrySet()) {
                         NonNullList<Ingredient> ingredients = NonNullList.create();
@@ -107,7 +113,7 @@ public class ZhenRecipeLoader {
                             BuiltInRegistries.ITEM.get(itemId).ifPresent(holder -> entries.add(OutputEntry.item(new ItemStack(holder.value(), count))));
                         }
                     }
-                    zoneOutputs.put("output_all", entries);
+                    zoneOutputs.put(SlotZone.ITEM_OUTPUT_ALL.getName(), entries);
                 } else if (outputsElement.isJsonObject()) {
                     for (Map.Entry<String, JsonElement> entry : outputsElement.getAsJsonObject().entrySet()) {
                         NonNullList<OutputEntry> entries = NonNullList.create();
@@ -128,6 +134,40 @@ public class ZhenRecipeLoader {
                 }
             }
 
+            Map<String, NonNullList<ZhenRecipe.FluidIngredient>> fluidInputs = new LinkedHashMap<>();
+            if (json.has("fluid_inputs")) {
+                JsonElement fluidsElement = json.get("fluid_inputs");
+                if (fluidsElement.isJsonObject()) {
+                    for (Map.Entry<String, JsonElement> entry : fluidsElement.getAsJsonObject().entrySet()) {
+                        NonNullList<ZhenRecipe.FluidIngredient> fluids = NonNullList.create();
+                        for (JsonElement element : entry.getValue().getAsJsonArray()) {
+                            JsonObject fluidObj = element.getAsJsonObject();
+                            String fluidStr = fluidObj.get("fluid").getAsString();
+                            int amount = fluidObj.get("amount").getAsInt();
+                            fluids.add(parseFluidIngredient(fluidStr, amount));
+                        }
+                        fluidInputs.put(entry.getKey(), fluids);
+                    }
+                }
+            }
+
+            Map<String, NonNullList<FluidStack>> fluidOutputs = new LinkedHashMap<>();
+            if (json.has("fluid_outputs")) {
+                JsonElement fluidsElement = json.get("fluid_outputs");
+                if (fluidsElement.isJsonObject()) {
+                    for (Map.Entry<String, JsonElement> entry : fluidsElement.getAsJsonObject().entrySet()) {
+                        NonNullList<FluidStack> fluids = NonNullList.create();
+                        for (JsonElement element : entry.getValue().getAsJsonArray()) {
+                            JsonObject fluidObj = element.getAsJsonObject();
+                            String fluidStr = fluidObj.get("fluid").getAsString();
+                            int amount = fluidObj.get("amount").getAsInt();
+                            fluids.add(new FluidStack(BuiltInRegistries.FLUID.get(Identifier.parse(fluidStr)).orElseThrow(), amount));
+                        }
+                        fluidOutputs.put(entry.getKey(), fluids);
+                    }
+                }
+            }
+
             Identifier lootTableId = null;
             if (json.has("loot_table")) {
                 String lootTableStr = json.get("loot_table").getAsString();
@@ -138,7 +178,7 @@ public class ZhenRecipeLoader {
                 }
             }
 
-            return new ZhenRecipe(type, zoneInputs, zoneOutputs, lootTableId, processingTime);
+            return new ZhenRecipe(type, zoneInputs, zoneOutputs, fluidInputs, fluidOutputs, lootTableId, processingTime);
         } catch (Exception e) {
             MagicIO.LOGGER.warn("Failed to load recipe from JSON: {}", e.getMessage());
             return null;
@@ -148,5 +188,19 @@ public class ZhenRecipeLoader {
     public static ZhenRecipe loadRecipeFromJson(InputStream inputStream) {
         MagicIO.LOGGER.warn("Using deprecated loadRecipeFromJson method without server validation");
         return null;
+    }
+
+    private static ZhenRecipe.FluidIngredient parseFluidIngredient(String fluidStr, int amount) {
+        if (fluidStr.startsWith("#")) {
+            Identifier tagId = Identifier.parse(fluidStr.substring(1));
+            TagKey<Fluid> tagKey = TagKey.create(Registries.FLUID, tagId);
+            java.util.Optional<HolderSet.Named<Fluid>> named = BuiltInRegistries.FLUID.get(tagKey);
+            HolderSet<Fluid> holders = named.isPresent() ? named.get() : HolderSet.empty();
+            return new ZhenRecipe.FluidIngredient(holders, amount);
+        } else {
+            Identifier fluidId = Identifier.parse(fluidStr);
+            Holder<Fluid> holder = BuiltInRegistries.FLUID.get(fluidId).orElseThrow();
+            return new ZhenRecipe.FluidIngredient(HolderSet.direct(holder), amount);
+        }
     }
 }

@@ -41,6 +41,7 @@ import net.minecraft.world.inventory.StackedContentsCompatible;
 import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.crafting.Ingredient;
+import net.neoforged.neoforge.fluids.FluidStack;
 import net.minecraft.world.phys.Vec3;
 import net.minecraft.world.item.crafting.RecipeHolder;
 import net.minecraft.world.item.crafting.RecipeManager;
@@ -68,9 +69,12 @@ public abstract class AbstractZhenBlockEntity extends BaseContainerBlockEntity i
     private @Nullable RecipeHolder<?> lastRecipe;
     private boolean autoInput = false;
     private boolean autoOutput = false;
-    private Map<Direction, Set<Integer>> faceAccess = new EnumMap<>(Direction.class);
+    private Map<Direction, Set<Integer>> itemFaceAccess = new EnumMap<>(Direction.class);
     private Map<Direction, Set<String>> zoneFaceAccess = new EnumMap<>(Direction.class);
     private NonNullList<ItemStack> items;
+    private NonNullList<FluidStack> tanks;
+    private Map<Direction, Set<Integer>> fluidFaceAccess = new EnumMap<>(Direction.class);
+    private final @Nullable Integer tankCapacity;
 
     // 构造函数
     protected AbstractZhenBlockEntity(BlockPos worldPosition, BlockState blockState) {
@@ -80,6 +84,8 @@ public abstract class AbstractZhenBlockEntity extends BaseContainerBlockEntity i
         this.type = ZhenTypes.getType(BuiltInRegistries.BLOCK.getKey(blockState.getBlock()));
         this.partition = this.type.getPartition();
         setItems(NonNullList.withSize(this.partition.getTotalSlots(), ItemStack.EMPTY));
+        this.tanks = NonNullList.withSize(this.partition.getTotalTanks(), FluidStack.EMPTY);
+        this.tankCapacity = this.type.getTankCapacity();
         initFaceAccess();
     }
 
@@ -102,14 +108,16 @@ public abstract class AbstractZhenBlockEntity extends BaseContainerBlockEntity i
     // ===== 面访问控制 =====
     public void initFaceAccess() {
         addSlotsToFaceAccess(Direction.UP, SlotZone.DROP_OUTPUT);
-        addSlotsToFaceAccess(Direction.DOWN, SlotZone.OUTPUT_ALL);
-        addSlotsToFaceAccess(Direction.Plane.HORIZONTAL, SlotZone.INPUT_ALL);
+        addSlotsToFaceAccess(Direction.DOWN, SlotZone.ITEM_OUTPUT_ALL);
+        addSlotsToFaceAccess(Direction.Plane.HORIZONTAL, SlotZone.ITEM_INPUT_ALL);
+        addFluidSlotsToFaceAccess(Direction.UP, SlotZone.FLUID_INPUT_ALL);
+        addFluidSlotsToFaceAccess(Direction.DOWN, SlotZone.FLUID_OUTPUT_ALL);
     }
 
     @Override
     public int[] getSlotsForFace(Direction direction) {
         if (direction == null) return new int[0];
-        Set<Integer> slots = faceAccess.get(direction);
+        Set<Integer> slots = itemFaceAccess.get(direction);
         if (slots == null || slots.isEmpty()) {
             return new int[0];
         }
@@ -117,42 +125,42 @@ public abstract class AbstractZhenBlockEntity extends BaseContainerBlockEntity i
     }
 
     public boolean isInput(int slot) {
-        return partition.getSlots(SlotZone.INPUT_ALL).contains(slot);
+        return partition.getSlots(SlotZone.ITEM_INPUT_ALL).contains(slot) || partition.getTanks(SlotZone.FLUID_INPUT_ALL).contains(slot);
     }
 
     public boolean isOutput(int slot) {
-        return partition.getSlots(SlotZone.OUTPUT_ALL).contains(slot);
+        return partition.getSlots(SlotZone.ITEM_OUTPUT_ALL).contains(slot) || partition.getTanks(SlotZone.FLUID_OUTPUT_ALL).contains(slot);
     }
 
     @Override
     public boolean canPlaceItemThroughFace(int slot, ItemStack itemStack, @Nullable Direction direction) {
         if (direction == null) return false;
-        Set<Integer> slots = faceAccess.get(direction);
+        Set<Integer> slots = itemFaceAccess.get(direction);
         return slots != null && slots.contains(slot) && isInput(slot);
     }
 
     @Override
     public boolean canTakeItemThroughFace(int slot, ItemStack itemStack, Direction direction) {
         if (direction == null) return false;
-        Set<Integer> slots = faceAccess.get(direction);
+        Set<Integer> slots = itemFaceAccess.get(direction);
         return slots != null && slots.contains(slot) && isOutput(slot);
     }
 
-    public Map<Direction, Set<Integer>> getFaceAccess() {
-        return faceAccess;
+    public Map<Direction, Set<Integer>> getItemFaceAccess() {
+        return itemFaceAccess;
     }
 
-    public void setFaceAccess(Map<Direction, Set<Integer>> faceAccess) {
-        this.faceAccess = new EnumMap<>(faceAccess);
+    public void setItemFaceAccess(Map<Direction, Set<Integer>> faceAccess) {
+        this.itemFaceAccess = new EnumMap<>(faceAccess);
         this.zoneFaceAccess.clear();
     }
 
     public void setSlotsForFace(Direction direction, Set<Integer> slots) {
         if (slots == null || slots.isEmpty()) {
-            faceAccess.remove(direction);
+            itemFaceAccess.remove(direction);
             zoneFaceAccess.remove(direction);
         } else {
-            faceAccess.put(direction, Set.copyOf(slots));
+            itemFaceAccess.put(direction, Set.copyOf(slots));
         }
     }
 
@@ -162,22 +170,22 @@ public abstract class AbstractZhenBlockEntity extends BaseContainerBlockEntity i
     }
 
     public void setSlotsForFace(Direction direction) {
-        faceAccess.remove(direction);
+        itemFaceAccess.remove(direction);
         zoneFaceAccess.remove(direction);
     }
 
     public void addSlotToFaceAccess(Direction direction, int slot) {
-        Set<Integer> slots = new java.util.HashSet<>(faceAccess.getOrDefault(direction, Set.of()));
+        Set<Integer> slots = new java.util.HashSet<>(itemFaceAccess.getOrDefault(direction, Set.of()));
         slots.add(slot);
-        faceAccess.put(direction, Set.copyOf(slots));
+        itemFaceAccess.put(direction, Set.copyOf(slots));
     }
 
     public void addSlotsToFaceAccess(Direction direction, Set<Integer> slots) {
         if (slots == null || slots.isEmpty()) {
-            faceAccess.remove(direction);
+            itemFaceAccess.remove(direction);
             zoneFaceAccess.remove(direction);
         } else {
-            faceAccess.put(direction, Set.copyOf(slots));
+            itemFaceAccess.put(direction, Set.copyOf(slots));
         }
     }
 
@@ -193,22 +201,22 @@ public abstract class AbstractZhenBlockEntity extends BaseContainerBlockEntity i
     }
 
     public void removeSlotFromFaceAccess(Direction direction, int slot) {
-        Set<Integer> slots = new java.util.HashSet<>(faceAccess.getOrDefault(direction, Set.of()));
+        Set<Integer> slots = new java.util.HashSet<>(itemFaceAccess.getOrDefault(direction, Set.of()));
         slots.remove(slot);
         if (slots.isEmpty()) {
-            faceAccess.remove(direction);
+            itemFaceAccess.remove(direction);
             zoneFaceAccess.remove(direction);
         } else {
-            faceAccess.put(direction, Set.copyOf(slots));
+            itemFaceAccess.put(direction, Set.copyOf(slots));
         }
     }
 
     public void removeSlotsFromFaceAccess(Direction direction, Set<Integer> slots) {
         if (slots == null || slots.isEmpty()) {
-            faceAccess.remove(direction);
+            itemFaceAccess.remove(direction);
             zoneFaceAccess.remove(direction);
         } else {
-            faceAccess.put(direction, Set.copyOf(slots));
+            itemFaceAccess.put(direction, Set.copyOf(slots));
         }
     }
 
@@ -217,8 +225,8 @@ public abstract class AbstractZhenBlockEntity extends BaseContainerBlockEntity i
         removeZoneFromFace(direction, zone.getName());
     }
 
-    public void clearFaceAccess() {
-        faceAccess.clear();
+    public void clearItemFaceAccess() {
+        itemFaceAccess.clear();
         zoneFaceAccess.clear();
     }
 
@@ -240,6 +248,51 @@ public abstract class AbstractZhenBlockEntity extends BaseContainerBlockEntity i
         } else {
             zoneFaceAccess.put(direction, Set.copyOf(zones));
         }
+    }
+
+    // ===== 流体面访问控制 =====
+
+    public int[] getTanksForFace(Direction direction) {
+        if (direction == null) return new int[0];
+        Set<Integer> tanks = fluidFaceAccess.get(direction);
+        if (tanks == null || tanks.isEmpty()) {
+            return new int[0];
+        }
+        return tanks.stream().mapToInt(Integer::intValue).toArray();
+    }
+
+    public Map<Direction, Set<Integer>> getFluidFaceAccess() {
+        return fluidFaceAccess;
+    }
+
+    public void setFluidFaceAccess(Map<Direction, Set<Integer>> fluidFaceAccess) {
+        this.fluidFaceAccess = new EnumMap<>(fluidFaceAccess);
+    }
+
+    public void addFluidSlotsToFaceAccess(Direction direction, Set<Integer> tanks) {
+        if (tanks == null || tanks.isEmpty()) {
+            fluidFaceAccess.remove(direction);
+        } else {
+            fluidFaceAccess.put(direction, Set.copyOf(tanks));
+        }
+    }
+
+    public void addFluidSlotsToFaceAccess(Direction direction, SlotZone zone) {
+        addFluidSlotsToFaceAccess(direction, partition.getTanks(zone));
+    }
+
+    public void addFluidSlotsToFaceAccess(Direction.Plane directions, SlotZone zone) {
+        for (Direction direction : directions) {
+            addFluidSlotsToFaceAccess(direction, zone);
+        }
+    }
+
+    public void removeFluidSlotsFromFaceAccess(Direction direction) {
+        fluidFaceAccess.remove(direction);
+    }
+
+    public void clearFluidFaceAccess() {
+        fluidFaceAccess.clear();
     }
 
     // ===== Zone 物品查询 =====
@@ -270,7 +323,7 @@ public abstract class AbstractZhenBlockEntity extends BaseContainerBlockEntity i
     }
 
     // ===== 物品插入提取 =====
-    public ItemStack insertItem(SlotZone zone, ItemStack stack) {
+    public ItemStack insertItem(SlotZone zone, ItemStack stack, boolean simulate) {
         if (stack.isEmpty()) return ItemStack.EMPTY;
 
         ItemStack remaining = stack.copy();
@@ -282,9 +335,11 @@ public abstract class AbstractZhenBlockEntity extends BaseContainerBlockEntity i
             if (ItemStack.isSameItemSameComponents(existing, remaining)) {
                 int canInsert = Math.min(remaining.getCount(), existing.getMaxStackSize() - existing.getCount());
                 if (canInsert > 0) {
-                    existing.grow(canInsert);
+                    if (!simulate) {
+                        existing.grow(canInsert);
+                        setChanged();
+                    }
                     remaining.shrink(canInsert);
-                    setChanged();
                 }
             }
         }
@@ -294,29 +349,184 @@ public abstract class AbstractZhenBlockEntity extends BaseContainerBlockEntity i
             ItemStack existing = items.get(slot);
             if (existing.isEmpty()) {
                 ItemStack placed = remaining.split(remaining.getCount());
-                items.set(slot, placed);
-                setChanged();
+                if (!simulate) {
+                    items.set(slot, placed);
+                    setChanged();
+                }
             }
         }
 
         return remaining.isEmpty() ? ItemStack.EMPTY : remaining;
     }
 
-    public ItemStack extractItem(SlotZone zone, int slot, int amount) {
+    public ItemStack extractItem(SlotZone zone, int slot, int amount, boolean simulate) {
         Set<Integer> slots = partition.getSlots(zone);
         if (!slots.contains(slot) || amount <= 0) return ItemStack.EMPTY;
-        return removeItem(slot, amount);
+        ItemStack existing = items.get(slot);
+        if (existing.isEmpty()) return ItemStack.EMPTY;
+        int extracted = Math.min(amount, existing.getCount());
+        ItemStack result = existing.copyWithCount(extracted);
+        if (!simulate) {
+            existing.shrink(extracted);
+            if (existing.isEmpty()) {
+                items.set(slot, ItemStack.EMPTY);
+            }
+            setChanged();
+        }
+        return result;
     }
 
-    public ItemStack extractItem(SlotZone zone, int amount) {
+    public ItemStack extractItem(SlotZone zone, int amount, boolean simulate) {
         if (amount <= 0) return ItemStack.EMPTY;
         for (int slot : partition.getSlots(zone)) {
-            ItemStack stack = items.get(slot);
-            if (!stack.isEmpty()) {
-                return removeItem(slot, Math.min(amount, stack.getCount()));
+            ItemStack existing = items.get(slot);
+            if (!existing.isEmpty()) {
+                return extractItem(zone, slot, Math.min(amount, existing.getCount()), simulate);
             }
         }
         return ItemStack.EMPTY;
+    }
+
+    // ===== 流体 Zone 查询 =====
+    public List<FluidStack> getFluidsInZone(SlotZone zone) {
+        Set<Integer> tankSlots = partition.getTanks(zone);
+        List<FluidStack> result = new ArrayList<>();
+        for (int tank : tankSlots) {
+            FluidStack fluid = tanks.get(tank);
+            if (!fluid.isEmpty()) {
+                result.add(fluid);
+            }
+        }
+        return result;
+    }
+
+    public boolean isFluidZoneEmpty(SlotZone zone) {
+        return getFluidsInZone(zone).isEmpty();
+    }
+
+    // ===== 流体插入提取 =====
+    public int fillTank(SlotZone zone, FluidStack fluid, boolean simulate) {
+        if (fluid.isEmpty() || tankCapacity == null) return 0;
+        Set<Integer> tankSlots = partition.getTanks(zone);
+
+        int filled = 0;
+        FluidStack toFill = fluid.copy();
+
+        for (int tank : tankSlots) {
+            if (toFill.isEmpty()) break;
+            FluidStack existing = tanks.get(tank);
+            if (existing.isEmpty()) {
+                int canInsert = Math.min(toFill.getAmount(), tankCapacity);
+                if (!simulate) {
+                    tanks.set(tank, toFill.copyWithAmount(canInsert));
+                    setChanged();
+                }
+                filled += canInsert;
+                toFill.shrink(canInsert);
+            } else if (FluidStack.isSameFluid(existing, toFill)) {
+                int canInsert = Math.min(toFill.getAmount(), tankCapacity - existing.getAmount());
+                if (canInsert > 0) {
+                    if (!simulate) {
+                        existing.grow(canInsert);
+                        setChanged();
+                    }
+                    filled += canInsert;
+                    toFill.shrink(canInsert);
+                }
+            }
+        }
+
+        return filled;
+    }
+
+    public FluidStack drainTank(SlotZone zone, int tank, int amount, boolean simulate) {
+        Set<Integer> tankSlots = partition.getTanks(zone);
+        if (!tankSlots.contains(tank) || amount <= 0) return FluidStack.EMPTY;
+
+        FluidStack existing = tanks.get(tank);
+        if (existing.isEmpty()) return FluidStack.EMPTY;
+
+        int drained = Math.min(amount, existing.getAmount());
+        FluidStack result = existing.copyWithAmount(drained);
+
+        if (!simulate) {
+            existing.shrink(drained);
+            if (existing.isEmpty()) {
+                tanks.set(tank, FluidStack.EMPTY);
+            }
+            setChanged();
+        }
+
+        return result;
+    }
+
+    public FluidStack drainTank(SlotZone zone, int amount, boolean simulate) {
+        if (amount <= 0) return FluidStack.EMPTY;
+        for (int tank : partition.getTanks(zone)) {
+            FluidStack existing = tanks.get(tank);
+            if (!existing.isEmpty()) {
+                return drainTank(zone, tank, Math.min(amount, existing.getAmount()), simulate);
+            }
+        }
+        return FluidStack.EMPTY;
+    }
+
+    // ===== 流体容量预检（与物品 canFitOutput / canConsume 对称） =====
+    public boolean canFillFluidOutput(SlotZone zone, FluidStack fluid) {
+        if (fluid.isEmpty() || tankCapacity == null) return false;
+        return fillTank(zone, fluid.copy(), true) >= fluid.getAmount();
+    }
+
+    public boolean canFitFluidZoneOutputs(Map<String, NonNullList<FluidStack>> fluidOutputs) {
+        for (Map.Entry<String, NonNullList<FluidStack>> entry : fluidOutputs.entrySet()) {
+            SlotZone zone = partition.getTankZoneByName(entry.getKey());
+            if (zone == null) return false;
+            for (FluidStack fluid : entry.getValue()) {
+                if (!fluid.isEmpty() && !canFillFluidOutput(zone, fluid)) return false;
+            }
+        }
+        return true;
+    }
+
+    public boolean canDrainFluidInput(SlotZone zone, ZhenRecipe.FluidIngredient ingredient) {
+        if (ingredient == null || ingredient.amount() <= 0) return false;
+        for (int tank : partition.getTanks(zone)) {
+            if (ingredient.test(tanks.get(tank))) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    public boolean canDrainAllFluidInputs(Map<String, NonNullList<ZhenRecipe.FluidIngredient>> fluidInputs) {
+        for (Map.Entry<String, NonNullList<ZhenRecipe.FluidIngredient>> entry : fluidInputs.entrySet()) {
+            SlotZone zone = partition.getTankZoneByName(entry.getKey());
+            if (zone == null) return false;
+            for (ZhenRecipe.FluidIngredient fluid : entry.getValue()) {
+                if (!canDrainFluidInput(zone, fluid)) return false;
+            }
+        }
+        return true;
+    }
+
+    public void consumeFluidInputs(NonNullList<ZhenRecipe.FluidIngredient> ingredients, SlotZone zone) {
+        for (ZhenRecipe.FluidIngredient ingredient : ingredients) {
+            for (int tank : partition.getTanks(zone)) {
+                FluidStack existing = tanks.get(tank);
+                if (ingredient.test(existing)) {
+                    drainTank(zone, tank, ingredient.amount(), false);
+                    break;
+                }
+            }
+        }
+    }
+
+    public void produceFluidOutputs(NonNullList<FluidStack> fluids, SlotZone zone) {
+        for (FluidStack fluid : fluids) {
+            if (!fluid.isEmpty()) {
+                fillTank(zone, fluid.copy(), false);
+            }
+        }
     }
 
     // ===== 配方处理 =====
@@ -331,66 +541,42 @@ public abstract class AbstractZhenBlockEntity extends BaseContainerBlockEntity i
     }
 
     public boolean canFitOutput(NonNullList<ItemStack> outputs) {
-        if (outputs.isEmpty()) return true;
+        return canFitOutput(outputs, SlotZone.ITEM_OUTPUT_ALL);
+    }
 
-        Set<Integer> outputSlots = partition.getSlots(SlotZone.OUTPUT_ALL);
-
-        int availableEmptySlots = 0;
-        for (int slot : outputSlots) {
-            if (items.get(slot).isEmpty()) {
-                availableEmptySlots++;
+    public boolean canFitOutput(NonNullList<ItemStack> outputs, SlotZone zone) {
+        for (ItemStack stack : outputs) {
+            if (!stack.isEmpty() && !insertItem(zone, stack.copy(), true).isEmpty()) {
+                return false;
             }
         }
-
-        int neededNewSlots = 0;
-        for (ItemStack output : outputs) {
-            if (output.isEmpty()) continue;
-
-            boolean canStack = false;
-            for (int slot : outputSlots) {
-                ItemStack existing = items.get(slot);
-                if (!existing.isEmpty()
-                        && ItemStack.isSameItemSameComponents(existing, output)
-                        && existing.getCount() + output.getCount() <= existing.getMaxStackSize()) {
-                    canStack = true;
-                    break;
-                }
-            }
-            if (!canStack) {
-                neededNewSlots++;
-            }
-        }
-
-        return neededNewSlots <= availableEmptySlots;
+        return true;
     }
 
     public boolean canFitOutput(Map<SlotZone, ItemStack> outputs) {
-        if (outputs.isEmpty()) return true;
-
         for (Map.Entry<SlotZone, ItemStack> entry : outputs.entrySet()) {
-            SlotZone zone = entry.getKey();
-            ItemStack stack = entry.getValue();
-            if (stack.isEmpty()) continue;
+            if (!entry.getValue().isEmpty() && !insertItem(entry.getKey(), entry.getValue().copy(), true).isEmpty()) {
+                return false;
+            }
+        }
+        return true;
+    }
 
-            Set<Integer> slots = partition.getSlots(zone);
-            int remaining = stack.getCount();
+    public boolean canConsume(NonNullList<Ingredient> ingredients) {
+        return canConsume(ingredients, SlotZone.ITEM_INPUT_ALL);
+    }
 
-            for (int slot : slots) {
-                if (remaining <= 0) break;
-                ItemStack existing = items.get(slot);
-                if (ItemStack.isSameItemSameComponents(existing, stack)) {
-                    remaining -= existing.getMaxStackSize() - existing.getCount();
+    public boolean canConsume(NonNullList<Ingredient> ingredients, SlotZone zone) {
+        for (Ingredient ingredient : ingredients) {
+            boolean found = false;
+            for (int slot : partition.getSlots(zone)) {
+                ItemStack simulated = extractItem(zone, slot, 1, true);
+                if (!simulated.isEmpty() && ingredient.test(simulated)) {
+                    found = true;
+                    break;
                 }
             }
-
-            for (int slot : slots) {
-                if (remaining <= 0) break;
-                if (items.get(slot).isEmpty()) {
-                    remaining -= Math.min(remaining, stack.getMaxStackSize());
-                }
-            }
-
-            if (remaining > 0) return false;
+            if (!found) return false;
         }
         return true;
     }
@@ -398,7 +584,7 @@ public abstract class AbstractZhenBlockEntity extends BaseContainerBlockEntity i
     public void produceOutputs(NonNullList<ItemStack> outputs) {
         for (ItemStack output : outputs) {
             if (!output.isEmpty()) {
-                insertItem(SlotZone.OUTPUT_ALL, output.copy());
+                insertItem(SlotZone.ITEM_OUTPUT_ALL, output.copy(), false);
             }
         }
     }
@@ -417,7 +603,7 @@ public abstract class AbstractZhenBlockEntity extends BaseContainerBlockEntity i
         for (Map.Entry<SlotZone, ItemStack> entry : outputs.entrySet()) {
             ItemStack stack = entry.getValue();
             if (!stack.isEmpty()) {
-                insertItem(entry.getKey(), stack.copy());
+                insertItem(entry.getKey(), stack.copy(), false);
             }
         }
     }
@@ -429,7 +615,8 @@ public abstract class AbstractZhenBlockEntity extends BaseContainerBlockEntity i
         if (blockEntity.currentRecipe == null) {
             if (blockEntity.inputsChanged && blockEntity.lastRecipe != null) {
                 ZhenRecipe lastRecipe = (ZhenRecipe) blockEntity.lastRecipe.value();
-                if (lastRecipe.matches(blockEntity.items, blockEntity.partition, level)) {
+                if (lastRecipe.matches(blockEntity.items, blockEntity.partition, level)
+                        && lastRecipe.matchesFluid(blockEntity.tanks, blockEntity.partition)) {
                     blockEntity.currentRecipe = lastRecipe;
                     blockEntity.processTime = 0;
                     blockEntity.inputsChanged = false;
@@ -439,7 +626,7 @@ public abstract class AbstractZhenBlockEntity extends BaseContainerBlockEntity i
 
             if (blockEntity.currentRecipe == null) {
                 ZhenRecipe newRecipe = ZhenRecipeManager.getInstance().findRecipe(blockEntity.type.getType(), blockEntity.items, blockEntity.partition, level);
-                if (newRecipe != null) {
+                if (newRecipe != null && newRecipe.matchesFluid(blockEntity.tanks, blockEntity.partition)) {
                     blockEntity.currentRecipe = newRecipe;
                     blockEntity.processTime = 0;
                     blockEntity.inputsChanged = false;
@@ -453,18 +640,28 @@ public abstract class AbstractZhenBlockEntity extends BaseContainerBlockEntity i
             needSync = true;
             if (blockEntity.processTime >= blockEntity.currentRecipe.getProcessingTime()) {
                 Map<String, NonNullList<ItemStack>> zoneOutputs = blockEntity.currentRecipe.rollOutput((ServerLevel) level);
-                if (blockEntity.canFitZoneOutputs(zoneOutputs)) {
+                Map<String, NonNullList<FluidStack>> fluidOutputs = blockEntity.currentRecipe.rollFluidOutput();
+                if (blockEntity.canFitZoneOutputs(zoneOutputs)
+                        && blockEntity.canConsumeAllInputs(blockEntity.currentRecipe)
+                        && blockEntity.canFitFluidZoneOutputs(fluidOutputs)
+                        && blockEntity.canDrainAllFluidInputs(blockEntity.currentRecipe.getFluidZoneInputs())) {
                     for (Map.Entry<String, NonNullList<Ingredient>> entry : blockEntity.currentRecipe.getZoneInputs().entrySet()) {
                         SlotZone zone = blockEntity.partition.getZoneByName(entry.getKey());
                         if (zone != null) {
                             blockEntity.consumeInputs(entry.getValue(), zone);
                         }
                     }
+                    for (Map.Entry<String, NonNullList<ZhenRecipe.FluidIngredient>> entry : blockEntity.currentRecipe.getFluidZoneInputs().entrySet()) {
+                        SlotZone zone = blockEntity.partition.getTankZoneByName(entry.getKey());
+                        if (zone != null) {
+                            blockEntity.consumeFluidInputs(entry.getValue(), zone);
+                        }
+                    }
                     for (Map.Entry<String, NonNullList<ItemStack>> entry : zoneOutputs.entrySet()) {
-                        if (entry.getKey().equals("drop_output")) {
+                        if (entry.getKey().equals(SlotZone.DROP_OUTPUT.getName())) {
                             Direction dropDir = Direction.DOWN;
                             for (Direction dir : Direction.values()) {
-                                if (blockEntity.zoneFaceAccess.getOrDefault(dir, Set.of()).contains("drop_output")) {
+                                if (blockEntity.zoneFaceAccess.getOrDefault(dir, Set.of()).contains(SlotZone.DROP_OUTPUT.getName())) {
                                     dropDir = dir;
                                     break;
                                 }
@@ -480,6 +677,12 @@ public abstract class AbstractZhenBlockEntity extends BaseContainerBlockEntity i
                             if (zone != null) {
                                 blockEntity.produceOutputs(entry.getValue(), zone);
                             }
+                        }
+                    }
+                    for (Map.Entry<String, NonNullList<FluidStack>> entry : fluidOutputs.entrySet()) {
+                        SlotZone zone = blockEntity.partition.getTankZoneByName(entry.getKey());
+                        if (zone != null) {
+                            blockEntity.produceFluidOutputs(entry.getValue(), zone);
                         }
                     }
                 }
@@ -502,20 +705,25 @@ public abstract class AbstractZhenBlockEntity extends BaseContainerBlockEntity i
 
     private boolean canFitZoneOutputs(Map<String, NonNullList<ItemStack>> zoneOutputs) {
         for (Map.Entry<String, NonNullList<ItemStack>> entry : zoneOutputs.entrySet()) {
-            if (entry.getKey().equals("drop_output")) continue;
+            if (entry.getKey().equals(SlotZone.DROP_OUTPUT.getName())) continue;
             SlotZone zone = partition.getZoneByName(entry.getKey());
             if (zone == null) return false;
-            for (ItemStack stack : entry.getValue()) {
-                if (!stack.isEmpty() && !canFitOutput(Map.of(zone, stack))) {
-                    return false;
-                }
-            }
+            if (!canFitOutput(entry.getValue(), zone)) return false;
+        }
+        return true;
+    }
+
+    private boolean canConsumeAllInputs(ZhenRecipe recipe) {
+        for (Map.Entry<String, NonNullList<Ingredient>> entry : recipe.getZoneInputs().entrySet()) {
+            SlotZone zone = partition.getZoneByName(entry.getKey());
+            if (zone == null) return false;
+            if (!canConsume(entry.getValue(), zone)) return false;
         }
         return true;
     }
 
     public boolean hasIngredients(NonNullList<Ingredient> ingredients) {
-        return hasIngredients(ingredients, SlotZone.INPUT_ALL);
+        return hasIngredients(ingredients, SlotZone.ITEM_INPUT_ALL);
     }
 
     public boolean hasIngredients(NonNullList<Ingredient> ingredients, SlotZone zone) {
@@ -537,7 +745,7 @@ public abstract class AbstractZhenBlockEntity extends BaseContainerBlockEntity i
     }
 
     public boolean consumeInputs(NonNullList<Ingredient> ingredients) {
-        return consumeInputs(ingredients, SlotZone.INPUT_ALL);
+        return consumeInputs(ingredients, SlotZone.ITEM_INPUT_ALL);
     }
 
     public boolean consumeInputs(NonNullList<Ingredient> ingredients, SlotZone zone) {
@@ -566,12 +774,25 @@ public abstract class AbstractZhenBlockEntity extends BaseContainerBlockEntity i
         return true;
     }
 
+    public NonNullList<FluidStack> getTanks() {
+        return tanks;
+    }
+
+    public @Nullable Integer getTankCapacity() {
+        return tankCapacity;
+    }
+
     // ===== 数据持久化 & 网络同步 =====
     @Override
     protected void saveAdditional(ValueOutput output) {
         super.saveAdditional(output);
         ContainerHelper.saveAllItems(output, items);
         output.putInt("process_time", processTime);
+        for (int i = 0; i < tanks.size(); i++) {
+            if (!tanks.get(i).isEmpty()) {
+                output.store("FluidTank_" + i, FluidStack.CODEC, tanks.get(i));
+            }
+        }
     }
 
     @Override
@@ -579,6 +800,9 @@ public abstract class AbstractZhenBlockEntity extends BaseContainerBlockEntity i
         super.loadAdditional(input);
         ContainerHelper.loadAllItems(input, items);
         processTime = input.getIntOr("process_time", 0);
+        for (int i = 0; i < tanks.size(); i++) {
+            tanks.set(i, input.read("FluidTank_" + i, FluidStack.CODEC).orElse(FluidStack.EMPTY));
+        }
     }
 
     @Override

@@ -1,13 +1,17 @@
 {
-  "type": "some_zhen",
+  "type": "small_sift_zhen",
   "inputs": {
-    "main_input": [{"item": "minecraft:iron_ingot"}],
-    "fuel_input": [{"item": "minecraft:coal"}]
+    "item_input_all":[
+      {"item":"coarse_dirt","count":1}
+    ]
   },
   "outputs": {
-    "main_output": [{"item": "minecraft:iron_block"}],
-    "byproduct_output": [{"loot_table": "minecraft:blocks/gravel"}],
-    "waste_output": [{"item": "minecraft:coal"}]
+    "item_output_all":[
+      {"item":"dirt","count":1}
+    ],
+    "drop_output":[
+      {"loot_table":"magic_io:zhen_loot"}
+    ]
   },
-  "processing_time": 200
+  "processing_time": 100
 }
