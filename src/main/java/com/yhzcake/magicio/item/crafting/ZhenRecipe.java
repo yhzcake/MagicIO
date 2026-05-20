@@ -1,16 +1,15 @@
 package com.yhzcake.magicio.item.crafting;
 
+import java.util.List;
 import java.util.Map;
-
-import org.jspecify.annotations.Nullable;
 
 import com.yhzcake.magicio.block.inventory.SlotPartition;
 import com.yhzcake.magicio.block.inventory.SlotZone;
+import com.yhzcake.magicio.io.ModIOTypes;
 
 import net.minecraft.core.Holder;
 import net.minecraft.core.HolderSet;
 import net.minecraft.core.NonNullList;
-import net.minecraft.resources.Identifier;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.crafting.Ingredient;
@@ -26,25 +25,14 @@ import net.minecraft.world.level.Level;
 
 public class ZhenRecipe implements Recipe<ZhenRecipeInput> {
     private final String type;
-    private final Map<String, NonNullList<Ingredient>> zoneInputs;
-    private final Map<String, NonNullList<OutputEntry>> zoneOutputs;
-    private final Map<String, NonNullList<FluidIngredient>> fluidInputs;
-    private final Map<String, NonNullList<FluidStack>> fluidOutputs;
-    @Nullable
-    private final Identifier lootTableId;
+    private final List<RecipeInput<?>> inputs;
+    private final List<RecipeOutput<?>> outputs;
     private final int processingTime;
 
-    public ZhenRecipe(String type, Map<String, NonNullList<Ingredient>> zoneInputs, Map<String, NonNullList<OutputEntry>> zoneOutputs, @Nullable Identifier lootTableId, int processingTime) {
-        this(type, zoneInputs, zoneOutputs, Map.of(), Map.of(), lootTableId, processingTime);
-    }
-
-    public ZhenRecipe(String type, Map<String, NonNullList<Ingredient>> zoneInputs, Map<String, NonNullList<OutputEntry>> zoneOutputs, Map<String, NonNullList<FluidIngredient>> fluidInputs, Map<String, NonNullList<FluidStack>> fluidOutputs, @Nullable Identifier lootTableId, int processingTime) {
+    public ZhenRecipe(String type, List<RecipeInput<?>> inputs, List<RecipeOutput<?>> outputs, int processingTime) {
         this.type = type;
-        this.zoneInputs = zoneInputs;
-        this.zoneOutputs = zoneOutputs;
-        this.fluidInputs = fluidInputs;
-        this.fluidOutputs = fluidOutputs;
-        this.lootTableId = lootTableId;
+        this.inputs = List.copyOf(inputs);
+        this.outputs = List.copyOf(outputs);
         this.processingTime = processingTime;
     }
 
@@ -52,107 +40,114 @@ public class ZhenRecipe implements Recipe<ZhenRecipeInput> {
         return type;
     }
 
-    public Map<String, NonNullList<Ingredient>> getZoneInputs() {
-        return zoneInputs;
+    public List<RecipeInput<?>> getInputs() {
+        return inputs;
     }
 
-    public Map<String, NonNullList<OutputEntry>> getZoneOutputs() {
-        return zoneOutputs;
-    }
-
-    public Map<String, NonNullList<FluidIngredient>> getFluidZoneInputs() {
-        return fluidInputs;
-    }
-
-    public Map<String, NonNullList<FluidStack>> getFluidZoneOutputs() {
-        return fluidOutputs;
-    }
-
-    @Nullable
-    public Identifier getLootTableId() {
-        return lootTableId;
+    public List<RecipeOutput<?>> getOutputs() {
+        return outputs;
     }
 
     public int getProcessingTime() {
         return processingTime;
     }
 
+    @SuppressWarnings("unchecked")
     public Map<String, NonNullList<ItemStack>> rollOutput(ServerLevel level) {
         Map<String, NonNullList<ItemStack>> result = new java.util.LinkedHashMap<>();
-        for (Map.Entry<String, NonNullList<OutputEntry>> entry : zoneOutputs.entrySet()) {
-            NonNullList<ItemStack> rolled = NonNullList.create();
-            for (OutputEntry output : entry.getValue()) {
-                rolled.addAll(output.roll(level));
-            }
-            result.put(entry.getKey(), rolled);
-        }
-        if (lootTableId != null) {
-            java.util.List<ItemStack> lootItems = ZhenRecipeLoader.getItemsFromLootTable(level.getServer(), level, lootTableId);
-            if (!result.isEmpty()) {
-                String firstZone = result.keySet().iterator().next();
-                result.get(firstZone).addAll(lootItems);
-            } else {
-                NonNullList<ItemStack> lootList = NonNullList.create();
-                lootList.addAll(lootItems);
-                result.put(SlotZone.ITEM_OUTPUT_ALL.getName(), lootList);
+        for (RecipeOutput<?> output : outputs) {
+            if (output.type() == ModIOTypes.ITEM.get()) {
+                NonNullList<OutputEntry> entries = (NonNullList<OutputEntry>) output.specification();
+                NonNullList<ItemStack> rolled = NonNullList.create();
+                for (OutputEntry entry : entries) {
+                    rolled.addAll(entry.roll(level));
+                }
+                result.merge(output.zoneName(), rolled, (a, b) -> { a.addAll(b); return a; });
             }
         }
         return result;
     }
 
+    @SuppressWarnings("unchecked")
     public Map<String, NonNullList<FluidStack>> rollFluidOutput() {
         Map<String, NonNullList<FluidStack>> result = new java.util.LinkedHashMap<>();
-        for (Map.Entry<String, NonNullList<FluidStack>> entry : fluidOutputs.entrySet()) {
-            NonNullList<FluidStack> rolled = NonNullList.create();
-            for (FluidStack fluid : entry.getValue()) {
-                if (!fluid.isEmpty()) {
-                    rolled.add(fluid.copy());
+        for (RecipeOutput<?> output : outputs) {
+            if (output.type() == ModIOTypes.FLUID.get()) {
+                NonNullList<FluidStack> entries = (NonNullList<FluidStack>) output.specification();
+                NonNullList<FluidStack> rolled = NonNullList.create();
+                for (FluidStack fluid : entries) {
+                    if (!fluid.isEmpty()) rolled.add(fluid.copy());
                 }
+                result.put(output.zoneName(), rolled);
             }
-            result.put(entry.getKey(), rolled);
         }
         return result;
     }
 
+    @SuppressWarnings("unchecked")
     public boolean matches(NonNullList<ItemStack> allItems, SlotPartition partition, Level level) {
-        for (Map.Entry<String, NonNullList<Ingredient>> entry : zoneInputs.entrySet()) {
-            SlotZone zone = partition.getZoneByName(entry.getKey());
-            if (zone == null) return false;
-            for (Ingredient ingredient : entry.getValue()) {
-                boolean found = false;
-                for (int slot : partition.getSlots(zone)) {
-                    if (ingredient.test(allItems.get(slot))) {
-                        found = true;
-                        break;
+        for (RecipeInput<?> input : inputs) {
+            if (input.type() == ModIOTypes.ITEM.get()) {
+                SlotZone zone = partition.getZoneByName(input.zoneName());
+                if (zone == null) return false;
+                NonNullList<Ingredient> ingredients = (NonNullList<Ingredient>) input.requirement();
+                for (Ingredient ingredient : ingredients) {
+                    boolean found = false;
+                    for (int slot : partition.getSlots(ModIOTypes.ITEM.get(), zone)) {
+                        if (ingredient.test(allItems.get(slot))) {
+                            found = true;
+                            break;
+                        }
                     }
+                    if (!found) return false;
                 }
-                if (!found) return false;
             }
         }
         return true;
     }
 
+    @SuppressWarnings("unchecked")
     public boolean matchesFluid(NonNullList<FluidStack> allTanks, SlotPartition partition) {
-        for (Map.Entry<String, NonNullList<FluidIngredient>> entry : fluidInputs.entrySet()) {
-            SlotZone zone = partition.getTankZoneByName(entry.getKey());
-            if (zone == null) return false;
-            for (FluidIngredient ingredient : entry.getValue()) {
-                boolean found = false;
-                for (int tank : partition.getTanks(zone)) {
-                    if (ingredient.test(allTanks.get(tank))) {
-                        found = true;
-                        break;
+        for (RecipeInput<?> input : inputs) {
+            if (input.type() == ModIOTypes.FLUID.get()) {
+                SlotZone zone = partition.getZoneByName(input.zoneName());
+                if (zone == null) return false;
+                NonNullList<FluidIngredient> ingredients = (NonNullList<FluidIngredient>) input.requirement();
+                for (FluidIngredient ingredient : ingredients) {
+                    boolean found = false;
+                    for (int tank : partition.getSlots(ModIOTypes.FLUID.get(), zone)) {
+                        if (ingredient.test(allTanks.get(tank))) {
+                            found = true;
+                            break;
+                        }
                     }
+                    if (!found) return false;
                 }
-                if (!found) return false;
             }
         }
         return true;
     }
 
+    @SuppressWarnings("unchecked")
     @Override
     public boolean matches(ZhenRecipeInput input, Level level) {
-        return false;
+        boolean hasItemInput = false;
+        for (RecipeInput<?> recipeInput : inputs) {
+            if (recipeInput.type() != ModIOTypes.ITEM.get()) continue;
+            hasItemInput = true;
+            NonNullList<Ingredient> ingredients = (NonNullList<Ingredient>) recipeInput.requirement();
+            for (Ingredient ingredient : ingredients) {
+                boolean found = false;
+                for (int i = 0; i < input.size(); i++) {
+                    if (ingredient.test(input.getItem(i))) {
+                        found = true;
+                        break;
+                    }
+                }
+                if (!found) return false;
+            }
+        }
+        return hasItemInput || inputs.isEmpty();
     }
 
     public ItemStack assemble(ZhenRecipeInput input, HolderLookup.Provider registries) {
@@ -179,20 +174,27 @@ public class ZhenRecipe implements Recipe<ZhenRecipeInput> {
         return type;
     }
 
+    @SuppressWarnings("unchecked")
     public NonNullList<Ingredient> getIngredients() {
         NonNullList<Ingredient> flat = NonNullList.create();
-        for (NonNullList<Ingredient> list : zoneInputs.values()) {
-            flat.addAll(list);
+        for (RecipeInput<?> input : inputs) {
+            if (input.type() == ModIOTypes.ITEM.get()) {
+                flat.addAll((NonNullList<Ingredient>) input.requirement());
+            }
         }
         return flat;
     }
 
+    @SuppressWarnings("unchecked")
     public NonNullList<ItemStack> getFixedOutputs() {
         NonNullList<ItemStack> flat = NonNullList.create();
-        for (NonNullList<OutputEntry> list : zoneOutputs.values()) {
-            for (OutputEntry entry : list) {
-                if (entry.stack() != null) {
-                    flat.add(entry.stack());
+        for (RecipeOutput<?> output : outputs) {
+            if (output.type() == ModIOTypes.ITEM.get()) {
+                NonNullList<OutputEntry> entries = (NonNullList<OutputEntry>) output.specification();
+                for (OutputEntry entry : entries) {
+                    if (entry.stack() != null) {
+                        flat.add(entry.stack());
+                    }
                 }
             }
         }

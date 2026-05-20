@@ -1,5 +1,7 @@
 package com.yhzcake.magicio.item.crafting;
 
+import com.yhzcake.magicio.io.ModIOTypes;
+
 import java.util.Map;
 
 import com.mojang.serialization.Codec;
@@ -19,7 +21,7 @@ import net.minecraft.world.item.crafting.Ingredient;
 import net.minecraft.world.item.crafting.RecipeSerializer;
 import net.neoforged.neoforge.fluids.FluidStack;
 
-@SuppressWarnings("null")
+@SuppressWarnings({"null", "unchecked"})
 public class ZhenRecipeSerializer {
 
     private static final Codec<OutputEntry> OUTPUT_ENTRY_CODEC = RecordCodecBuilder.create(
@@ -32,11 +34,22 @@ public class ZhenRecipeSerializer {
     );
 
     private static final Codec<NonNullList<OutputEntry>> OUTPUT_LIST_CODEC =
-            OUTPUT_ENTRY_CODEC.listOf().xmap(NonNullList::copyOf, list -> (java.util.List<OutputEntry>) list);
+            OUTPUT_ENTRY_CODEC.listOf().xmap(
+                    (java.util.List<OutputEntry> list) -> {
+                        NonNullList<OutputEntry> result = NonNullList.create();
+                        result.addAll(list);
+                        return result;
+                    },
+                    list -> (java.util.List<OutputEntry>) list
+            );
 
     private static final Codec<Map<String, NonNullList<Ingredient>>> INPUT_MAP_CODEC =
             Codec.unboundedMap(Codec.STRING, Ingredient.CODEC.listOf().xmap(
-                    NonNullList::copyOf,
+                    (java.util.List<Ingredient> list) -> {
+                        NonNullList<Ingredient> result = NonNullList.create();
+                        result.addAll(list);
+                        return result;
+                    },
                     list -> (java.util.List<Ingredient>) list
             ));
 
@@ -48,94 +61,198 @@ public class ZhenRecipeSerializer {
                     HolderSetCodec.create(Registries.FLUID, BuiltInRegistries.FLUID.holderByNameCodec(), false)
                             .fieldOf("fluid").forGetter(ZhenRecipe.FluidIngredient::fluids),
                     Codec.INT.fieldOf("amount").forGetter(ZhenRecipe.FluidIngredient::amount)
-            ).apply(instance, ZhenRecipe.FluidIngredient::new)
+            ).apply(instance, (fluids, amount) -> new ZhenRecipe.FluidIngredient(fluids, amount))
     );
 
     private static final Codec<Map<String, NonNullList<ZhenRecipe.FluidIngredient>>> FLUID_INPUT_MAP_CODEC =
             Codec.unboundedMap(Codec.STRING, FLUID_INGREDIENT_CODEC.listOf().xmap(
-                    NonNullList::copyOf,
+                    (java.util.List<ZhenRecipe.FluidIngredient> list) -> {
+                        NonNullList<ZhenRecipe.FluidIngredient> result = NonNullList.create();
+                        result.addAll(list);
+                        return result;
+                    },
                     list -> (java.util.List<ZhenRecipe.FluidIngredient>) list
             ));
 
     private static final Codec<Map<String, NonNullList<FluidStack>>> FLUID_OUTPUT_MAP_CODEC =
             Codec.unboundedMap(Codec.STRING, FluidStack.CODEC.listOf().xmap(
-                    NonNullList::copyOf,
+                    (java.util.List<FluidStack> list) -> {
+                        NonNullList<FluidStack> result = NonNullList.create();
+                        result.addAll(list);
+                        return result;
+                    },
                     list -> (java.util.List<FluidStack>) list
             ));
 
+    private static ZhenRecipe buildFromParsed(
+            String type,
+            Map<String, NonNullList<Ingredient>> itemInputs,
+            Map<String, NonNullList<OutputEntry>> itemOutputs,
+            Map<String, NonNullList<ZhenRecipe.FluidIngredient>> fluidInputs,
+            Map<String, NonNullList<FluidStack>> fluidOutputs,
+            Identifier lootTableId,
+            int processingTime
+    ) {
+        java.util.List<RecipeInput<?>> inputs = new java.util.ArrayList<>();
+        java.util.List<RecipeOutput<?>> outputs = new java.util.ArrayList<>();
+
+        for (var entry : itemInputs.entrySet()) {
+            inputs.add(new RecipeInput<>(ModIOTypes.ITEM.get(), entry.getKey(), entry.getValue()));
+        }
+        for (var entry : fluidInputs.entrySet()) {
+            inputs.add(new RecipeInput<>(ModIOTypes.FLUID.get(), entry.getKey(), entry.getValue()));
+        }
+
+        for (var entry : itemOutputs.entrySet()) {
+            String zoneName = entry.getKey();
+            NonNullList<OutputEntry> entries = entry.getValue();
+            if (lootTableId != null) {
+                NonNullList<OutputEntry> merged = NonNullList.create();
+                merged.addAll(entries);
+                merged.add(OutputEntry.lootTable(lootTableId));
+                outputs.add(new RecipeOutput<>(ModIOTypes.ITEM.get(), zoneName, merged));
+            } else {
+                outputs.add(new RecipeOutput<>(ModIOTypes.ITEM.get(), zoneName, entries));
+            }
+        }
+        if (itemOutputs.isEmpty() && lootTableId != null) {
+            outputs.add(new RecipeOutput<>(ModIOTypes.ITEM.get(), "item_output_all",
+                    NonNullList.of(OutputEntry.lootTable(lootTableId))));
+        }
+        for (var entry : fluidOutputs.entrySet()) {
+            outputs.add(new RecipeOutput<>(ModIOTypes.FLUID.get(), entry.getKey(), entry.getValue()));
+        }
+
+        return new ZhenRecipe(type, inputs, outputs, processingTime);
+    }
+
     public static final MapCodec<ZhenRecipe> CODEC = RecordCodecBuilder.mapCodec(
             instance -> instance.group(
-                    Codec.STRING.fieldOf("type").forGetter(ZhenRecipe::getRecipeType),
-                    INPUT_MAP_CODEC.fieldOf("inputs").forGetter(ZhenRecipe::getZoneInputs),
-                    OUTPUT_MAP_CODEC.optionalFieldOf("outputs", Map.of()).forGetter(ZhenRecipe::getZoneOutputs),
-                    FLUID_INPUT_MAP_CODEC.optionalFieldOf("fluid_inputs", Map.of()).forGetter(ZhenRecipe::getFluidZoneInputs),
-                    FLUID_OUTPUT_MAP_CODEC.optionalFieldOf("fluid_outputs", Map.of()).forGetter(ZhenRecipe::getFluidZoneOutputs),
-                    Identifier.CODEC.optionalFieldOf("loot_table", (Identifier) null).forGetter(ZhenRecipe::getLootTableId),
+                    Codec.STRING.fieldOf("type").forGetter(r -> r.getRecipeType()),
+                    INPUT_MAP_CODEC.fieldOf("inputs").forGetter(
+                            r -> {
+                                Map<String, NonNullList<Ingredient>> map = new java.util.LinkedHashMap<>();
+                                for (RecipeInput<?> input : r.getInputs()) {
+                                    if (input.type() == ModIOTypes.ITEM.get()) {
+                                        map.put(input.zoneName(), (NonNullList<Ingredient>) input.requirement());
+                                    }
+                                }
+                                return map;
+                            }),
+                    OUTPUT_MAP_CODEC.optionalFieldOf("outputs", Map.of()).forGetter(
+                            r -> {
+                                Map<String, NonNullList<OutputEntry>> map = new java.util.LinkedHashMap<>();
+                                for (RecipeOutput<?> output : r.getOutputs()) {
+                                    if (output.type() == ModIOTypes.ITEM.get()) {
+                                        map.put(output.zoneName(), (NonNullList<OutputEntry>) output.specification());
+                                    }
+                                }
+                                return map;
+                            }),
+                    FLUID_INPUT_MAP_CODEC.optionalFieldOf("fluid_inputs", Map.of()).forGetter(
+                            r -> {
+                                Map<String, NonNullList<ZhenRecipe.FluidIngredient>> map = new java.util.LinkedHashMap<>();
+                                for (RecipeInput<?> input : r.getInputs()) {
+                                    if (input.type() == ModIOTypes.FLUID.get()) {
+                                        map.put(input.zoneName(), (NonNullList<ZhenRecipe.FluidIngredient>) input.requirement());
+                                    }
+                                }
+                                return map;
+                            }),
+                    FLUID_OUTPUT_MAP_CODEC.optionalFieldOf("fluid_outputs", Map.of()).forGetter(
+                            r -> {
+                                Map<String, NonNullList<FluidStack>> map = new java.util.LinkedHashMap<>();
+                                for (RecipeOutput<?> output : r.getOutputs()) {
+                                    if (output.type() == ModIOTypes.FLUID.get()) {
+                                        map.put(output.zoneName(), (NonNullList<FluidStack>) output.specification());
+                                    }
+                                }
+                                return map;
+                            }),
+                    Identifier.CODEC.optionalFieldOf("loot_table", (Identifier) null).forGetter(r -> null),
                     Codec.INT.fieldOf("processing_time").forGetter(ZhenRecipe::getProcessingTime)
-            ).apply(instance, ZhenRecipe::new)
+            ).apply(instance, ZhenRecipeSerializer::buildFromParsed)
     );
 
     private static final StreamCodec<RegistryFriendlyByteBuf, ZhenRecipe.FluidIngredient> FLUID_INGREDIENT_STREAM_CODEC = StreamCodec.composite(
             ByteBufCodecs.holderSet(Registries.FLUID), ZhenRecipe.FluidIngredient::fluids,
             ByteBufCodecs.VAR_INT, ZhenRecipe.FluidIngredient::amount,
-            ZhenRecipe.FluidIngredient::new
+            (fluids, amount) -> new ZhenRecipe.FluidIngredient(fluids, amount)
     );
 
     public static final StreamCodec<RegistryFriendlyByteBuf, ZhenRecipe> STREAM_CODEC = StreamCodec.of(
             (buf, recipe) -> {
+                java.util.List<RecipeInput<?>> inputs = recipe.getInputs();
+                java.util.List<RecipeOutput<?>> outputs = recipe.getOutputs();
+
                 buf.writeUtf(recipe.getRecipeType());
-                buf.writeInt(recipe.getZoneInputs().size());
-                for (Map.Entry<String, NonNullList<Ingredient>> entry : recipe.getZoneInputs().entrySet()) {
-                    buf.writeUtf(entry.getKey());
-                    NonNullList<Ingredient> ingredients = entry.getValue();
+
+                java.util.List<RecipeInput<?>> itemInputs = new java.util.ArrayList<>();
+                java.util.List<RecipeInput<?>> fluidInputsList = new java.util.ArrayList<>();
+                for (RecipeInput<?> input : inputs) {
+                    if (input.type() == ModIOTypes.ITEM.get()) itemInputs.add(input);
+                    else if (input.type() == ModIOTypes.FLUID.get()) fluidInputsList.add(input);
+                }
+
+                buf.writeInt(itemInputs.size());
+                for (RecipeInput<?> input : itemInputs) {
+                    buf.writeUtf(input.zoneName());
+                    NonNullList<Ingredient> ingredients = (NonNullList<Ingredient>) input.requirement();
                     buf.writeInt(ingredients.size());
                     for (Ingredient ingredient : ingredients) {
                         Ingredient.CONTENTS_STREAM_CODEC.encode(buf, ingredient);
                     }
                 }
-                buf.writeInt(recipe.getZoneOutputs().size());
-                for (Map.Entry<String, NonNullList<OutputEntry>> entry : recipe.getZoneOutputs().entrySet()) {
-                    buf.writeUtf(entry.getKey());
-                    NonNullList<OutputEntry> entries = entry.getValue();
+
+                java.util.List<RecipeOutput<?>> itemOutputs = new java.util.ArrayList<>();
+                java.util.List<RecipeOutput<?>> fluidOutputsList = new java.util.ArrayList<>();
+                for (RecipeOutput<?> output : outputs) {
+                    if (output.type() == ModIOTypes.ITEM.get()) itemOutputs.add(output);
+                    else if (output.type() == ModIOTypes.FLUID.get()) fluidOutputsList.add(output);
+                }
+
+                buf.writeInt(itemOutputs.size());
+                for (RecipeOutput<?> output : itemOutputs) {
+                    buf.writeUtf(output.zoneName());
+                    NonNullList<OutputEntry> entries = (NonNullList<OutputEntry>) output.specification();
                     buf.writeInt(entries.size());
-                    for (OutputEntry output : entries) {
-                        buf.writeBoolean(output.isLootTable());
-                        if (output.isLootTable()) {
-                            Identifier.STREAM_CODEC.encode(buf, output.lootTableId());
+                    for (OutputEntry entry : entries) {
+                        buf.writeBoolean(entry.isLootTable());
+                        if (entry.isLootTable()) {
+                            Identifier.STREAM_CODEC.encode(buf, entry.lootTableId());
                         } else {
-                            ItemStack.STREAM_CODEC.encode(buf, output.stack());
+                            ItemStack.STREAM_CODEC.encode(buf, entry.stack());
                         }
                     }
                 }
-                buf.writeInt(recipe.getFluidZoneInputs().size());
-                for (Map.Entry<String, NonNullList<ZhenRecipe.FluidIngredient>> entry : recipe.getFluidZoneInputs().entrySet()) {
-                    buf.writeUtf(entry.getKey());
-                    NonNullList<ZhenRecipe.FluidIngredient> fluids = entry.getValue();
+
+                buf.writeInt(fluidInputsList.size());
+                for (RecipeInput<?> input : fluidInputsList) {
+                    buf.writeUtf(input.zoneName());
+                    NonNullList<ZhenRecipe.FluidIngredient> fluids = (NonNullList<ZhenRecipe.FluidIngredient>) input.requirement();
                     buf.writeInt(fluids.size());
                     for (ZhenRecipe.FluidIngredient fluid : fluids) {
                         FLUID_INGREDIENT_STREAM_CODEC.encode(buf, fluid);
                     }
                 }
-                buf.writeInt(recipe.getFluidZoneOutputs().size());
-                for (Map.Entry<String, NonNullList<FluidStack>> entry : recipe.getFluidZoneOutputs().entrySet()) {
-                    buf.writeUtf(entry.getKey());
-                    NonNullList<FluidStack> fluids = entry.getValue();
+
+                buf.writeInt(fluidOutputsList.size());
+                for (RecipeOutput<?> output : fluidOutputsList) {
+                    buf.writeUtf(output.zoneName());
+                    NonNullList<FluidStack> fluids = (NonNullList<FluidStack>) output.specification();
                     buf.writeInt(fluids.size());
                     for (FluidStack fluid : fluids) {
                         FluidStack.OPTIONAL_STREAM_CODEC.encode(buf, fluid);
                     }
                 }
-                Identifier lootTableId = recipe.getLootTableId();
-                buf.writeBoolean(lootTableId != null);
-                if (lootTableId != null) {
-                    Identifier.STREAM_CODEC.encode(buf, lootTableId);
-                }
+
                 buf.writeInt(recipe.getProcessingTime());
             },
             buf -> {
                 String type = buf.readUtf();
+
                 int inputZoneCount = buf.readInt();
-                Map<String, NonNullList<Ingredient>> zoneInputs = new java.util.LinkedHashMap<>();
+                java.util.List<RecipeInput<?>> inputs = new java.util.ArrayList<>();
                 for (int i = 0; i < inputZoneCount; i++) {
                     String zoneName = buf.readUtf();
                     int ingredientCount = buf.readInt();
@@ -143,10 +260,11 @@ public class ZhenRecipeSerializer {
                     for (int j = 0; j < ingredientCount; j++) {
                         ingredients.add(Ingredient.CONTENTS_STREAM_CODEC.decode(buf));
                     }
-                    zoneInputs.put(zoneName, ingredients);
+                    inputs.add(new RecipeInput<>(ModIOTypes.ITEM.get(), zoneName, ingredients));
                 }
+
                 int outputZoneCount = buf.readInt();
-                Map<String, NonNullList<OutputEntry>> zoneOutputs = new java.util.LinkedHashMap<>();
+                java.util.List<RecipeOutput<?>> outputs = new java.util.ArrayList<>();
                 for (int i = 0; i < outputZoneCount; i++) {
                     String zoneName = buf.readUtf();
                     int entryCount = buf.readInt();
@@ -159,10 +277,10 @@ public class ZhenRecipeSerializer {
                             entries.add(OutputEntry.item(ItemStack.STREAM_CODEC.decode(buf)));
                         }
                     }
-                    zoneOutputs.put(zoneName, entries);
+                    outputs.add(new RecipeOutput<>(ModIOTypes.ITEM.get(), zoneName, entries));
                 }
+
                 int fluidInputZoneCount = buf.readInt();
-                Map<String, NonNullList<ZhenRecipe.FluidIngredient>> fluidInputs = new java.util.LinkedHashMap<>();
                 for (int i = 0; i < fluidInputZoneCount; i++) {
                     String zoneName = buf.readUtf();
                     int fluidCount = buf.readInt();
@@ -170,10 +288,10 @@ public class ZhenRecipeSerializer {
                     for (int j = 0; j < fluidCount; j++) {
                         fluids.add(FLUID_INGREDIENT_STREAM_CODEC.decode(buf));
                     }
-                    fluidInputs.put(zoneName, fluids);
+                    inputs.add(new RecipeInput<>(ModIOTypes.FLUID.get(), zoneName, fluids));
                 }
+
                 int fluidOutputZoneCount = buf.readInt();
-                Map<String, NonNullList<FluidStack>> fluidOutputs = new java.util.LinkedHashMap<>();
                 for (int i = 0; i < fluidOutputZoneCount; i++) {
                     String zoneName = buf.readUtf();
                     int fluidCount = buf.readInt();
@@ -181,13 +299,13 @@ public class ZhenRecipeSerializer {
                     for (int j = 0; j < fluidCount; j++) {
                         fluids.add(FluidStack.OPTIONAL_STREAM_CODEC.decode(buf));
                     }
-                    fluidOutputs.put(zoneName, fluids);
+                    outputs.add(new RecipeOutput<>(ModIOTypes.FLUID.get(), zoneName, fluids));
                 }
-                Identifier lootTableId = buf.readBoolean() ? Identifier.STREAM_CODEC.decode(buf) : null;
+
                 int processingTime = buf.readInt();
-                return new ZhenRecipe(type, zoneInputs, zoneOutputs, fluidInputs, fluidOutputs, lootTableId, processingTime);
+                return new ZhenRecipe(type, inputs, outputs, processingTime);
             }
     );
 
-    public static final RecipeSerializer<ZhenRecipe> INSTANCE = new RecipeSerializer<>(CODEC, STREAM_CODEC);
+    public static final RecipeSerializer<ZhenRecipe> INSTANCE = new RecipeSerializer<ZhenRecipe>(CODEC, STREAM_CODEC);
 }

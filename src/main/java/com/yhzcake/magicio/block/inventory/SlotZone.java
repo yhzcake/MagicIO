@@ -3,37 +3,23 @@ package com.yhzcake.magicio.block.inventory;
 import java.util.Objects;
 
 public final class SlotZone {
-    public static final SlotZone ITEM_INPUT_ALL = new SlotZone("item_input_all", true, false, false, false);
-    public static final SlotZone ITEM_OUTPUT_ALL = new SlotZone("item_output_all", false, true, false, false);
-    public static final SlotZone DROP_OUTPUT = new SlotZone("drop_output", false, true, false, false);
-    public static final SlotZone FLUID_INPUT_ALL = new SlotZone("fluid_input_all", false, false, true, false);
-    public static final SlotZone FLUID_OUTPUT_ALL = new SlotZone("fluid_output_all", false, false, false, true);
+    public static final SlotZone ITEM_INPUT_ALL = new SlotZone("item_input_all");
+    public static final SlotZone ITEM_OUTPUT_ALL = new SlotZone("item_output_all");
+    public static final SlotZone DROP_OUTPUT = new SlotZone("drop_output");
+    public static final SlotZone FLUID_INPUT_ALL = new SlotZone("fluid_input_all");
+    public static final SlotZone FLUID_OUTPUT_ALL = new SlotZone("fluid_output_all");
+    public static final SlotZone ENERGY_INPUT_ALL = new SlotZone("fe_input_all");
+    public static final SlotZone ENERGY_OUTPUT_ALL = new SlotZone("fe_output_all");
 
     private final String name;
-    private final boolean isItemInput;
-    private final boolean isItemOutput;
-    private final boolean isItem;
-    private final boolean isLiquitOutput;
-    private final boolean isLiquitInput;
-    private final boolean isLiquit;
 
-    public SlotZone(String name, boolean isItemInput, boolean isItemOutput, boolean isLiquitInput, boolean isLiquitOutput) {
+    public SlotZone(String name) {
         this.name = Objects.requireNonNull(name, "name is null");
-        this.isItemInput = isItemInput;
-        this.isItemOutput = isItemOutput;
-        this.isItem = isItemInput || isItemOutput;
-        this.isLiquitInput = isLiquitInput;
-        this.isLiquitOutput = isLiquitOutput;
-        this.isLiquit = isLiquitInput || isLiquitOutput;
     }
 
-    public String getName() { return name; }
-    public boolean isItemInput() { return isItemInput; }
-    public boolean isItemOutput() { return isItemOutput; }
-    public boolean isItem() { return isItem; }
-    public boolean isLiquitInput() { return isLiquitInput; }
-    public boolean isLiquitOutput() { return isLiquitOutput; }
-    public boolean isLiquit() { return isLiquit; }
+    public String getName() {
+        return name;
+    }
 
     @Override
     public boolean equals(Object o) {

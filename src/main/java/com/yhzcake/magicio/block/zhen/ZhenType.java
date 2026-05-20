@@ -7,6 +7,7 @@ import com.yhzcake.magicio.MagicIO;
 import com.yhzcake.magicio.block.entity.method.SmallSiftMethod;
 import com.yhzcake.magicio.block.inventory.SlotPartition;
 import com.yhzcake.magicio.block.inventory.SlotZone;
+import com.yhzcake.magicio.io.ModIOTypes;
 import com.yhzcake.magicio.utils.ElementType;
 
 import net.minecraft.core.BlockPos;
@@ -33,18 +34,20 @@ public class ZhenType {
     private final int level;
     private final Function<SmallSiftMethod, Runnable> tickFactory;
     private final @Nullable Integer tankCapacity;
+    private final @Nullable Integer feCapacity;
 
-    public ZhenType(ElementType elementType, String type, SlotPartition partition, int level, Function<SmallSiftMethod, Runnable> tickFactory, @Nullable Integer tankCapacity) {
+    public ZhenType(ElementType elementType, String type, SlotPartition partition, int level, Function<SmallSiftMethod, Runnable> tickFactory, @Nullable Integer tankCapacity, @Nullable Integer feCapacity) {
         this.elementType = Objects.requireNonNull(elementType, "elementType is null");
         this.type = Objects.requireNonNull(type, "type is null");
         this.partition = Objects.requireNonNull(partition, "partition is null");
         this.level = level;
         this.tickFactory = tickFactory;
         this.tankCapacity = tankCapacity;
+        this.feCapacity = feCapacity;
     }
 
     public ZhenType(ElementType elementType, String type, SlotPartition partition, int level, Function<SmallSiftMethod, Runnable> tickFactory) {
-        this(elementType, type, partition, level, tickFactory, null);
+        this(elementType, type, partition, level, tickFactory, null, null);
     }
 
     public ElementType getElementType() {
@@ -60,19 +63,19 @@ public class ZhenType {
     }
 
     public int getInput() {
-        return partition.getSlots(SlotZone.ITEM_INPUT_ALL).size();
+        return partition.getSlots(ModIOTypes.ITEM.get(), SlotZone.ITEM_INPUT_ALL).size();
     }
 
     public int getOutput() {
-        return partition.getSlots(SlotZone.ITEM_OUTPUT_ALL).size();
+        return partition.getSlots(ModIOTypes.ITEM.get(), SlotZone.ITEM_OUTPUT_ALL).size();
     }
 
     public int getFluidInput() {
-        return partition.getTanks(SlotZone.FLUID_INPUT_ALL).size();
+        return partition.getSlots(ModIOTypes.FLUID.get(), SlotZone.FLUID_INPUT_ALL).size();
     }
 
     public int getFluidOutput() {
-        return partition.getTanks(SlotZone.FLUID_OUTPUT_ALL).size();
+        return partition.getSlots(ModIOTypes.FLUID.get(), SlotZone.FLUID_OUTPUT_ALL).size();
     }
 
     public int getLevel() {
@@ -115,5 +118,9 @@ public class ZhenType {
 
     public @Nullable Integer getTankCapacity() {
         return this.tankCapacity;
+    }
+
+    public @Nullable Integer getEnergyCapacity() {
+        return this.feCapacity;
     }
 }

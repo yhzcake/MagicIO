@@ -2,6 +2,7 @@ package com.yhzcake.magicio.item.crafting;
 
 import com.yhzcake.magicio.MagicIO;
 import com.yhzcake.magicio.block.inventory.SlotZone;
+import com.yhzcake.magicio.io.ModIOTypes;
 import com.google.gson.*;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
@@ -24,7 +25,7 @@ import net.neoforged.neoforge.fluids.FluidStack;
 import java.io.Reader;
 import java.io.InputStreamReader;
 import java.io.InputStream;
-import java.util.LinkedHashMap;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
@@ -62,6 +63,7 @@ public class ZhenRecipeLoader {
         }
     }
 
+    @SuppressWarnings("unchecked")
     public static ZhenRecipe loadRecipeFromJson(InputStream inputStream, MinecraftServer server) {
         try (Reader reader = new InputStreamReader(inputStream)) {
             Gson gson = new Gson();
@@ -70,7 +72,9 @@ public class ZhenRecipeLoader {
             String type = json.get("type").getAsString();
             int processingTime = json.get("processing_time").getAsInt();
 
-            Map<String, NonNullList<Ingredient>> zoneInputs = new LinkedHashMap<>();
+            List<RecipeInput<?>> inputs = new ArrayList<>();
+            List<RecipeOutput<?>> outputs = new ArrayList<>();
+
             if (json.has("inputs")) {
                 JsonElement inputsElement = json.get("inputs");
                 if (inputsElement.isJsonArray()) {
@@ -81,7 +85,7 @@ public class ZhenRecipeLoader {
                         Identifier itemId = Identifier.parse(item);
                         BuiltInRegistries.ITEM.get(itemId).ifPresent(holder -> flat.add(Ingredient.of(holder.value())));
                     }
-                    zoneInputs.put(SlotZone.ITEM_INPUT_ALL.getName(), flat);
+                    inputs.add(new RecipeInput<>(ModIOTypes.ITEM.get(), SlotZone.ITEM_INPUT_ALL.getName(), flat));
                 } else if (inputsElement.isJsonObject()) {
                     for (Map.Entry<String, JsonElement> entry : inputsElement.getAsJsonObject().entrySet()) {
                         NonNullList<Ingredient> ingredients = NonNullList.create();
@@ -91,12 +95,11 @@ public class ZhenRecipeLoader {
                             Identifier itemId = Identifier.parse(item);
                             BuiltInRegistries.ITEM.get(itemId).ifPresent(holder -> ingredients.add(Ingredient.of(holder.value())));
                         }
-                        zoneInputs.put(entry.getKey(), ingredients);
+                        inputs.add(new RecipeInput<>(ModIOTypes.ITEM.get(), entry.getKey(), ingredients));
                     }
                 }
             }
 
-            Map<String, NonNullList<OutputEntry>> zoneOutputs = new LinkedHashMap<>();
             if (json.has("outputs")) {
                 JsonElement outputsElement = json.get("outputs");
                 if (outputsElement.isJsonArray()) {
@@ -113,7 +116,7 @@ public class ZhenRecipeLoader {
                             BuiltInRegistries.ITEM.get(itemId).ifPresent(holder -> entries.add(OutputEntry.item(new ItemStack(holder.value(), count))));
                         }
                     }
-                    zoneOutputs.put(SlotZone.ITEM_OUTPUT_ALL.getName(), entries);
+                    outputs.add(new RecipeOutput<>(ModIOTypes.ITEM.get(), SlotZone.ITEM_OUTPUT_ALL.getName(), entries));
                 } else if (outputsElement.isJsonObject()) {
                     for (Map.Entry<String, JsonElement> entry : outputsElement.getAsJsonObject().entrySet()) {
                         NonNullList<OutputEntry> entries = NonNullList.create();
@@ -129,12 +132,11 @@ public class ZhenRecipeLoader {
                                 BuiltInRegistries.ITEM.get(itemId).ifPresent(holder -> entries.add(OutputEntry.item(new ItemStack(holder.value(), count))));
                             }
                         }
-                        zoneOutputs.put(entry.getKey(), entries);
+                        outputs.add(new RecipeOutput<>(ModIOTypes.ITEM.get(), entry.getKey(), entries));
                     }
                 }
             }
 
-            Map<String, NonNullList<ZhenRecipe.FluidIngredient>> fluidInputs = new LinkedHashMap<>();
             if (json.has("fluid_inputs")) {
                 JsonElement fluidsElement = json.get("fluid_inputs");
                 if (fluidsElement.isJsonObject()) {
@@ -146,12 +148,11 @@ public class ZhenRecipeLoader {
                             int amount = fluidObj.get("amount").getAsInt();
                             fluids.add(parseFluidIngredient(fluidStr, amount));
                         }
-                        fluidInputs.put(entry.getKey(), fluids);
+                        inputs.add(new RecipeInput<>(ModIOTypes.FLUID.get(), entry.getKey(), fluids));
                     }
                 }
             }
 
-            Map<String, NonNullList<FluidStack>> fluidOutputs = new LinkedHashMap<>();
             if (json.has("fluid_outputs")) {
                 JsonElement fluidsElement = json.get("fluid_outputs");
                 if (fluidsElement.isJsonObject()) {
@@ -163,22 +164,31 @@ public class ZhenRecipeLoader {
                             int amount = fluidObj.get("amount").getAsInt();
                             fluids.add(new FluidStack(BuiltInRegistries.FLUID.get(Identifier.parse(fluidStr)).orElseThrow(), amount));
                         }
-                        fluidOutputs.put(entry.getKey(), fluids);
+                        outputs.add(new RecipeOutput<>(ModIOTypes.FLUID.get(), entry.getKey(), fluids));
                     }
                 }
             }
 
-            Identifier lootTableId = null;
             if (json.has("loot_table")) {
                 String lootTableStr = json.get("loot_table").getAsString();
-                lootTableId = Identifier.parse(lootTableStr);
-                if (!validateLootTable(server, lootTableId)) {
+                Identifier lootTableId = Identifier.parse(lootTableStr);
+                if (server != null && !validateLootTable(server, lootTableId)) {
                     MagicIO.LOGGER.warn("Loot table {} not found, recipe will be discarded", lootTableId);
                     return null;
                 }
+                if (!outputs.isEmpty()) {
+                    RecipeOutput<?> first = outputs.get(0);
+                    NonNullList<OutputEntry> augmented = NonNullList.create();
+                    augmented.addAll((NonNullList<OutputEntry>) first.specification());
+                    augmented.add(OutputEntry.lootTable(lootTableId));
+                    outputs.set(0, new RecipeOutput<>(ModIOTypes.ITEM.get(), first.zoneName(), augmented));
+                } else {
+                    outputs.add(new RecipeOutput<>(ModIOTypes.ITEM.get(), SlotZone.ITEM_OUTPUT_ALL.getName(),
+                            NonNullList.of(OutputEntry.lootTable(lootTableId))));
+                }
             }
 
-            return new ZhenRecipe(type, zoneInputs, zoneOutputs, fluidInputs, fluidOutputs, lootTableId, processingTime);
+            return new ZhenRecipe(type, inputs, outputs, processingTime);
         } catch (Exception e) {
             MagicIO.LOGGER.warn("Failed to load recipe from JSON: {}", e.getMessage());
             return null;

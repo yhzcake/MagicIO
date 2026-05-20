@@ -3,6 +3,7 @@ package com.yhzcake.magicio;
 import java.io.InputStream;
 import java.util.Map;
 
+import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;
 
 import com.mojang.logging.LogUtils;
@@ -18,11 +19,18 @@ import com.yhzcake.magicio.item.crafting.ModRecipeManager;
 import com.yhzcake.magicio.item.crafting.ZhenRecipe;
 import com.yhzcake.magicio.item.crafting.ZhenRecipeLoader;
 import com.yhzcake.magicio.item.crafting.ZhenRecipeManager;
+import com.yhzcake.magicio.io.EnergyIOComponent;
+import com.yhzcake.magicio.io.IOType;
+import com.yhzcake.magicio.io.ModIOTypes;
 import com.yhzcake.magicio.utils.ElementType;
 import com.yhzcake.magicio.utils.ElementTypes;
 
 import net.minecraft.resources.Identifier;
+import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.packs.resources.Resource;
+import net.minecraft.server.packs.resources.ResourceManager;
+import net.minecraft.server.packs.resources.SimplePreparableReloadListener;
+import net.minecraft.util.profiling.ProfilerFiller;
 
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.core.registries.Registries;
@@ -41,6 +49,7 @@ import net.neoforged.fml.common.Mod;
 import net.neoforged.fml.config.ModConfig;
 import net.neoforged.fml.event.lifecycle.FMLCommonSetupEvent;
 import net.neoforged.neoforge.common.NeoForge;
+import net.neoforged.neoforge.event.AddServerReloadListenersEvent;
 import net.neoforged.neoforge.event.BuildCreativeModeTabContentsEvent;
 import net.neoforged.neoforge.event.server.ServerStartingEvent;
 import net.neoforged.neoforge.registries.DeferredBlock;
@@ -84,6 +93,8 @@ public class MagicIO {
         ElementTypes.register(modEventBus);
         modEventBus.register(ZhenType.class);
         ZhenTypes.register(modEventBus);
+        modEventBus.register(IOType.class);
+        ModIOTypes.register(modEventBus);
         ModBlocks.registerZhenBlocks(BLOCKS);
         ModBlocks.registerZhenBlockItems(ITEMS);
         BLOCKS.register(modEventBus);
@@ -106,9 +117,18 @@ public class MagicIO {
                 Capabilities.Fluid.BLOCK,
                 ModBlockEntities.ZHEN_BLOCK.get(),
                 (be, direction) -> {
-                    Integer capacity = ((AbstractZhenBlockEntity) be).getTankCapacity();
+                    Integer capacity = ((AbstractZhenBlockEntity) be).getFluidTankCapacity();
                     if (capacity == null) return null;
-                    return new FluidStacksResourceHandler(((AbstractZhenBlockEntity) be).getTanks(), capacity);
+                    return new FluidStacksResourceHandler(((AbstractZhenBlockEntity) be).getFluidTanks(), capacity);
+                }
+        );
+        event.registerBlockEntity(
+                Capabilities.Energy.BLOCK,
+                ModBlockEntities.ZHEN_BLOCK.get(),
+                (be, direction) -> {
+                    EnergyIOComponent energyComponent = ((AbstractZhenBlockEntity) be).getEnergyIOComponent();
+                    if (energyComponent == null) return null;
+                    return energyComponent.getHandler();
                 }
         );
     }
@@ -129,12 +149,23 @@ public class MagicIO {
     }
 
     @SubscribeEvent
-    public void onServerStarting(ServerStartingEvent event) {
-        LOGGER.info("HELLO from server starting");
+    public void onAddReloadListeners(AddServerReloadListenersEvent event) {
+        event.addListener(Identifier.fromNamespaceAndPath(MagicIO.MOD_ID, "zhen_recipes"), new ZhenRecipeReloadListener());
+    }
 
-        var server = event.getServer();
-        var resourceManager = server.getResourceManager();
+    private static class ZhenRecipeReloadListener extends SimplePreparableReloadListener<Void> {
+        @Override
+        protected Void prepare(ResourceManager resourceManager, ProfilerFiller profiler) {
+            return null;
+        }
 
+        @Override
+        protected void apply(Void data, ResourceManager resourceManager, ProfilerFiller profiler) {
+            loadAllRecipes(resourceManager, null);
+        }
+    }
+
+    private static void loadAllRecipes(ResourceManager resourceManager, @Nullable MinecraftServer server) {
         ZhenRecipeManager.getInstance().clearRecipes();
 
         Map<Identifier, Resource> resources = resourceManager.listResources(
@@ -163,5 +194,11 @@ public class MagicIO {
         }
 
         LOGGER.info("配方加载完成，共加载 {} 个配方", ZhenRecipeManager.getInstance().getRecipes().size());
+    }
+
+    @SubscribeEvent
+    public void onServerStarting(ServerStartingEvent event) {
+        LOGGER.info("HELLO from server starting");
+        loadAllRecipes(event.getServer().getResourceManager(), event.getServer());
     }
 }
