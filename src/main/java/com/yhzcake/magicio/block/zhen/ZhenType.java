@@ -34,16 +34,16 @@ public class ZhenType {
     private final int level;
     private final Function<SmallSiftMethod, Runnable> tickFactory;
     private final @Nullable Integer tankCapacity;
-    private final @Nullable Integer feCapacity;
+    private final @Nullable Integer energyCapacity;
 
-    public ZhenType(ElementType elementType, String type, SlotPartition partition, int level, Function<SmallSiftMethod, Runnable> tickFactory, @Nullable Integer tankCapacity, @Nullable Integer feCapacity) {
+    public ZhenType(ElementType elementType, String type, SlotPartition partition, int level, Function<SmallSiftMethod, Runnable> tickFactory, @Nullable Integer tankCapacity, @Nullable Integer energyCapacity) {
         this.elementType = Objects.requireNonNull(elementType, "elementType is null");
         this.type = Objects.requireNonNull(type, "type is null");
         this.partition = Objects.requireNonNull(partition, "partition is null");
         this.level = level;
         this.tickFactory = tickFactory;
         this.tankCapacity = tankCapacity;
-        this.feCapacity = feCapacity;
+        this.energyCapacity = energyCapacity;
     }
 
     public ZhenType(ElementType elementType, String type, SlotPartition partition, int level, Function<SmallSiftMethod, Runnable> tickFactory) {
@@ -121,6 +121,6 @@ public class ZhenType {
     }
 
     public @Nullable Integer getEnergyCapacity() {
-        return this.feCapacity;
+        return this.energyCapacity;
     }
 }

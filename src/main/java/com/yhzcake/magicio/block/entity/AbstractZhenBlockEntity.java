@@ -95,7 +95,7 @@ public abstract class AbstractZhenBlockEntity extends BaseContainerBlockEntity i
     private void initIOComponents() {
         ItemIOComponent itemIO = new ItemIOComponent(items, partition);
         fluidIOComponent = new FluidIOComponent(tanks, partition, tankCapacity);
-        energyIOComponent = new EnergyIOComponent(energyCapacity, energyCapacity != null ? energyCapacity : 0);
+        energyIOComponent = new EnergyIOComponent(energyCapacity != null ? energyCapacity : 0, energyCapacity != null ? 1 : 0);
         ioProcessor.register(itemIO);
         ioProcessor.register(fluidIOComponent);
         ioProcessor.register(energyIOComponent);
