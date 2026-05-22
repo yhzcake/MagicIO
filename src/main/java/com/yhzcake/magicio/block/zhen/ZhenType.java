@@ -1,16 +1,23 @@
 package com.yhzcake.magicio.block.zhen;
 
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import java.util.function.Function;
 
 import com.yhzcake.magicio.MagicIO;
 import com.yhzcake.magicio.block.entity.method.SmallSiftMethod;
 import com.yhzcake.magicio.block.inventory.SlotPartition;
 import com.yhzcake.magicio.block.inventory.SlotZone;
+import com.yhzcake.magicio.io.IOType;
 import com.yhzcake.magicio.io.ModIOTypes;
 import com.yhzcake.magicio.utils.ElementType;
 
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
 import net.minecraft.core.Registry;
 import net.minecraft.resources.Identifier;
 import net.minecraft.resources.ResourceKey;
@@ -36,7 +43,17 @@ public class ZhenType {
     private final @Nullable Integer tankCapacity;
     private final @Nullable Integer energyCapacity;
 
-    public ZhenType(ElementType elementType, String type, SlotPartition partition, int level, Function<SmallSiftMethod, Runnable> tickFactory, @Nullable Integer tankCapacity, @Nullable Integer energyCapacity) {
+    /** 面访问控制：外部从某个世界方向连接时暴露哪些槽位。Direction → IOType → 槽位集合。 */
+    private final Map<Direction, Map<IOType, Set<Integer>>> faceAccess;
+
+    /** 虚拟端口分区：每个端口名可推送的 zone 名称集合。空集合表示全部 zone。 */
+    private final Map<String, Set<String>> portZones;
+
+    public ZhenType(ElementType elementType, String type, SlotPartition partition, int level,
+            Function<SmallSiftMethod, Runnable> tickFactory,
+            @Nullable Integer tankCapacity, @Nullable Integer energyCapacity,
+            Map<Direction, Map<IOType, Set<String>>> faceZoneAccess,
+            Map<String, Set<String>> portZones) {
         this.elementType = Objects.requireNonNull(elementType, "elementType is null");
         this.type = Objects.requireNonNull(type, "type is null");
         this.partition = Objects.requireNonNull(partition, "partition is null");
@@ -44,11 +61,53 @@ public class ZhenType {
         this.tickFactory = tickFactory;
         this.tankCapacity = tankCapacity;
         this.energyCapacity = energyCapacity;
+        this.faceAccess = buildFaceAccess(partition, faceZoneAccess);
+        this.portZones = portZones != null ? Map.copyOf(portZones) : Map.of();
     }
 
-    public ZhenType(ElementType elementType, String type, SlotPartition partition, int level, Function<SmallSiftMethod, Runnable> tickFactory) {
+    public ZhenType(ElementType elementType, String type, SlotPartition partition, int level,
+            Function<SmallSiftMethod, Runnable> tickFactory,
+            @Nullable Integer tankCapacity, @Nullable Integer energyCapacity) {
+        this(elementType, type, partition, level, tickFactory, tankCapacity, energyCapacity, Map.of(), Map.of());
+    }
+
+    public ZhenType(ElementType elementType, String type, SlotPartition partition, int level,
+            Function<SmallSiftMethod, Runnable> tickFactory) {
         this(elementType, type, partition, level, tickFactory, null, null);
     }
+
+    private static Map<Direction, Map<IOType, Set<Integer>>> buildFaceAccess(
+            SlotPartition partition, Map<Direction, Map<IOType, Set<String>>> zoneAccess) {
+        if (zoneAccess == null || zoneAccess.isEmpty()) return Map.of();
+        Map<Direction, Map<IOType, Set<Integer>>> result = new HashMap<>();
+        for (var dirEntry : zoneAccess.entrySet()) {
+            Direction dir = dirEntry.getKey();
+            Map<IOType, Set<Integer>> typeMap = new HashMap<>();
+            for (var typeEntry : dirEntry.getValue().entrySet()) {
+                IOType ioType = typeEntry.getKey();
+                Set<Integer> slots = new HashSet<>();
+                for (String zoneName : typeEntry.getValue()) {
+                    SlotZone zone = partition.getZoneByName(zoneName);
+                    if (zone != null) {
+                        slots.addAll(partition.getSlots(ioType, zone));
+                    }
+                }
+                typeMap.put(ioType, Collections.unmodifiableSet(slots));
+            }
+            result.put(dir, Collections.unmodifiableMap(typeMap));
+        }
+        return Collections.unmodifiableMap(result);
+    }
+
+    public Map<Direction, Map<IOType, Set<Integer>>> getFaceAccess() {
+        return faceAccess;
+    }
+
+    public Map<String, Set<String>> getPortZones() {
+        return portZones;
+    }
+
+    // ===== 原有方法 =====
 
     public ElementType getElementType() {
         return elementType;

@@ -1,5 +1,7 @@
 package com.yhzcake.magicio.block.zhen;
 
+import java.util.Map;
+import java.util.Set;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
@@ -9,9 +11,6 @@ import com.yhzcake.magicio.block.inventory.SlotPartition;
 import com.yhzcake.magicio.block.inventory.SlotZone;
 import com.yhzcake.magicio.io.ModIOTypes;
 import com.yhzcake.magicio.utils.ElementTypes;
-
-import java.util.Map;
-import java.util.Set;
 
 import net.minecraft.core.Holder.Reference;
 import net.minecraft.resources.Identifier;

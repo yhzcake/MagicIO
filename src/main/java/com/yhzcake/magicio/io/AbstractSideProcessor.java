@@ -1,0 +1,432 @@
+package com.yhzcake.magicio.io;
+
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+
+import org.jspecify.annotations.Nullable;
+
+import com.yhzcake.magicio.block.entity.method.SmallSiftMethod;
+import com.yhzcake.magicio.block.inventory.SlotPartition;
+import com.yhzcake.magicio.block.inventory.SlotZone;
+import com.yhzcake.magicio.block.zhen.ZhenType;
+import com.yhzcake.magicio.block.zhenbus.PortBinding;
+import com.yhzcake.magicio.block.zhenbus.VirtualPort;
+import com.yhzcake.magicio.item.crafting.RecipeProcessor;
+import com.yhzcake.magicio.item.crafting.ZhenRecipe;
+
+import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
+import net.minecraft.core.NonNullList;
+import net.minecraft.network.FriendlyByteBuf;
+import net.minecraft.world.ContainerHelper;
+import net.minecraft.world.InteractionHand;
+import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.level.Level;
+import net.minecraft.world.level.storage.ValueInput;
+import net.minecraft.world.level.storage.ValueOutput;
+import net.minecraft.world.phys.Vec3;
+import net.minecraft.world.phys.shapes.Shapes;
+import net.minecraft.world.phys.shapes.VoxelShape;
+import net.neoforged.neoforge.fluids.FluidStack;
+
+public abstract class AbstractSideProcessor implements SideProcessor {
+
+    protected final Direction side;
+    protected final ZhenType zhenType;
+    protected final BlockPos pos;
+    protected final Level level;
+    protected final SlotPartition partition;
+    protected final IOProcessor ioProcessor;
+    protected final NonNullList<ItemStack> items;
+    protected final NonNullList<FluidStack> tanks;
+    protected final @Nullable Integer tankCapacity;
+    protected final @Nullable Integer energyCapacity;
+
+    protected int processTime = 0;
+    protected boolean inputsChanged = false;
+    protected @Nullable ZhenRecipe currentRecipe;
+    protected Runnable onChanged = () -> {};
+    protected Map<Direction, Set<String>> zoneFaceAccess = Collections.emptyMap();
+
+    private int tickInterval = 1;
+    private int tickCounter = 0;
+
+    private final Map<String, VirtualPort> virtualPorts = new HashMap<>();
+
+    // 输出槽位集合缓存（由 initIOComponents 初始化）
+    private Set<Integer> outputItemSlots = Set.of();
+    private Set<Integer> outputFluidSlots = Set.of();
+    private Set<Integer> inputItemSlots = Set.of();
+    private Set<Integer> inputFluidSlots = Set.of();
+
+    public AbstractSideProcessor(Direction side, ZhenType zhenType, BlockPos pos, Level level) {
+        this.side = side;
+        this.zhenType = zhenType;
+        this.pos = pos;
+        this.level = level;
+        this.partition = zhenType.getPartition();
+        this.tankCapacity = zhenType.getTankCapacity();
+        this.energyCapacity = zhenType.getEnergyCapacity();
+
+        int itemSlots = partition.getTotalSlots(ModIOTypes.ITEM.get());
+        int fluidSlots = partition.getTotalSlots(ModIOTypes.FLUID.get());
+        this.items = NonNullList.withSize(itemSlots, ItemStack.EMPTY);
+        this.tanks = NonNullList.withSize(fluidSlots, FluidStack.EMPTY);
+
+        this.ioProcessor = new IOProcessor();
+        initIOComponents();
+        initVirtualPorts();
+        initSlotCache();
+    }
+
+    private void initIOComponents() {
+        ioProcessor.register(new ItemIOComponent(items, partition));
+        ioProcessor.register(new FluidIOComponent(tanks, partition, tankCapacity));
+        if (energyCapacity != null) {
+            ioProcessor.register(new EnergyIOComponent(energyCapacity, 1));
+        }
+        ioProcessor.registerChangeCallback(() -> {
+            Runnable cb = onChanged;
+            if (cb != null) cb.run();
+            inputsChanged = true;
+        });
+    }
+
+    private void initSlotCache() {
+        inputItemSlots = Set.copyOf(partition.getSlots(ModIOTypes.ITEM.get(), SlotZone.ITEM_INPUT_ALL));
+        outputItemSlots = Set.copyOf(partition.getSlots(ModIOTypes.ITEM.get(), SlotZone.ITEM_OUTPUT_ALL));
+        inputFluidSlots = Set.copyOf(partition.getSlots(ModIOTypes.FLUID.get(), SlotZone.FLUID_INPUT_ALL));
+        outputFluidSlots = Set.copyOf(partition.getSlots(ModIOTypes.FLUID.get(), SlotZone.FLUID_OUTPUT_ALL));
+    }
+
+    // ============ VirtualPort 管理 ============
+
+    private void initVirtualPorts() {
+        virtualPorts.clear();
+        virtualPorts.put("self", new VirtualPort("self", List.of(
+                new PortBinding(side, side.getOpposite())
+        )));
+        for (Direction dir : Direction.values()) {
+            virtualPorts.put(dir.getName(), new VirtualPort(dir.getName(), List.of(
+                    new PortBinding(dir, dir.getOpposite())
+            )));
+        }
+    }
+
+    public void scanAllPorts() {
+        if (level == null) return;
+        long currentTick = level.getGameTime();
+        for (VirtualPort port : virtualPorts.values()) {
+            port.forceScan(level, pos, currentTick);
+        }
+    }
+
+    public void invalidatePorts() {
+        for (VirtualPort port : virtualPorts.values()) {
+            port.invalidate();
+        }
+    }
+
+    public void tickRefreshPorts() {
+        if (level == null) return;
+        long currentTick = level.getGameTime();
+        for (VirtualPort port : virtualPorts.values()) {
+            port.tickRefresh(level, pos, currentTick);
+        }
+    }
+
+    public @Nullable VirtualPort getPort(String name) {
+        return virtualPorts.get(name);
+    }
+
+    public Map<String, VirtualPort> getVirtualPorts() {
+        return Collections.unmodifiableMap(virtualPorts);
+    }
+
+    // ============ 面访问控制 ============
+
+    @Override
+    public @Nullable Map<IOType, Set<Integer>> getFaceAccess(Direction worldDirection) {
+        // 优先使用 ZhenType 中定义的面 IO 配置
+        Map<Direction, Map<IOType, Set<Integer>>> defined = zhenType.getFaceAccess();
+        if (!defined.isEmpty()) {
+            return defined.get(worldDirection);
+        }
+        // 默认约定：本面方向暴露输出槽，反方向暴露输入槽，其他方向不暴露
+        if (worldDirection == side) {
+            Map<IOType, Set<Integer>> result = new HashMap<>();
+            if (!outputItemSlots.isEmpty()) result.put(ModIOTypes.ITEM.get(), outputItemSlots);
+            if (!outputFluidSlots.isEmpty()) result.put(ModIOTypes.FLUID.get(), outputFluidSlots);
+            if (energyCapacity != null) result.put(ModIOTypes.ENERGY.get(), Set.of(0));
+            return result.isEmpty() ? null : result;
+        }
+        if (worldDirection == side.getOpposite()) {
+            Map<IOType, Set<Integer>> result = new HashMap<>();
+            if (!inputItemSlots.isEmpty()) result.put(ModIOTypes.ITEM.get(), inputItemSlots);
+            if (!inputFluidSlots.isEmpty()) result.put(ModIOTypes.FLUID.get(), inputFluidSlots);
+            return result.isEmpty() ? null : result;
+        }
+        return null;
+    }
+
+    // ============ VirtualPort 产出推送 ============
+
+    /** 遍历所有已注册的 IO 组件，自动通过 VirtualPort 推送其输出槽。 */
+    private void pushOutputsThroughPorts() {
+        boolean changed = false;
+
+        for (IOComponent<?, ?> component : ioProcessor.getAll()) {
+            IOType type = component.type();
+            if (type == ModIOTypes.ENERGY.get()) {
+                changed = pushEnergyOutput() || changed;
+            } else if (type == ModIOTypes.FLUID.get()) {
+                changed = pushOutput(outputFluidSlots, tanks, type) || changed;
+            } else {
+                changed = pushOutput(outputItemSlots, items, type) || changed;
+            }
+        }
+
+        if (changed && onChanged != null) {
+            onChanged.run();
+        }
+    }
+
+    private <T> boolean pushOutput(Set<Integer> outputSlots, NonNullList<T> storage, IOType type) {
+        boolean changed = false;
+        for (int slot : outputSlots) {
+            T value = storage.get(slot);
+            if (isSlotEmpty(value)) continue;
+            for (VirtualPort port : virtualPorts.values()) {
+                if (!port.hasDirectConnection()) continue;
+                T remaining = port.transfer(value, type, false);
+                if (!isSlotSameAmount(remaining, value)) {
+                    storage.set(slot, remaining);
+                    changed = true;
+                    break;
+                }
+            }
+        }
+        return changed;
+    }
+
+    private static boolean isSlotEmpty(Object value) {
+        if (value instanceof ItemStack is) return is.isEmpty();
+        if (value instanceof FluidStack fs) return fs.isEmpty();
+        return false;
+    }
+
+    private static boolean isSlotSameAmount(Object a, Object b) {
+        if (a instanceof ItemStack ia && b instanceof ItemStack ib) return ia.getCount() == ib.getCount();
+        if (a instanceof FluidStack fa && b instanceof FluidStack fb) return fa.getAmount() == fb.getAmount();
+        return true;
+    }
+
+    @SuppressWarnings({"rawtypes"})
+    private boolean pushEnergyOutput() {
+        if (energyCapacity == null) return false;
+        IOComponent rawComp = ioProcessor.get(ModIOTypes.ENERGY.get());
+        if (!(rawComp instanceof EnergyIOComponent energyComp)) return false;
+        if (energyComp.getEnergy() <= 0) return false;
+
+        for (VirtualPort port : virtualPorts.values()) {
+            if (!port.hasDirectConnection() || !port.canAccept(ModIOTypes.ENERGY.get())) continue;
+            int available = energyComp.getEnergy();
+            Integer remaining = port.transfer(available, ModIOTypes.ENERGY.get(), false);
+            if (remaining < available) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    // ============ 接口实现 ============
+
+    @Override
+    public Direction getSide() {
+        return side;
+    }
+
+    @Override
+    public ZhenType getZhenType() {
+        return zhenType;
+    }
+
+    @Override
+    public IOProcessor getIOProcessor() {
+        return ioProcessor;
+    }
+
+    @Override
+    public BlockPos getPos() {
+        return pos;
+    }
+
+    @Override
+    public Level getLevel() {
+        return level;
+    }
+
+    public void setTickInterval(int interval) {
+        this.tickInterval = Math.max(1, interval);
+    }
+
+    @Override
+    public boolean hasWork() {
+        return currentRecipe != null || inputsChanged;
+    }
+
+    @Override
+    public void tick() {
+        if (++tickCounter % tickInterval != 0) return;
+
+        boolean hasTickFactory = zhenType.getTickFactory() != null;
+
+        // 懒汉跳过：无配方、无输入变化、无 tickFactory 时跳过全部处理
+        if (!hasWork() && !hasTickFactory) {
+            return;
+        }
+
+        tickRefreshPorts();
+
+        if (hasWork()) {
+            RecipeProcessor.State recipeState = new RecipeProcessor.State();
+            recipeState.processTime = this.processTime;
+            recipeState.inputsChanged = this.inputsChanged;
+            recipeState.currentRecipe = this.currentRecipe;
+
+            boolean needSync = RecipeProcessor.processTick(
+                    level, pos, recipeState, zhenType.getType(),
+                    partition, items, tanks, ioProcessor, zoneFaceAccess, onChanged);
+
+            this.processTime = recipeState.processTime;
+            this.inputsChanged = recipeState.inputsChanged;
+            this.currentRecipe = recipeState.currentRecipe;
+
+            pushOutputsThroughPorts();
+
+            if (needSync) {
+                level.sendBlockUpdated(pos, level.getBlockState(pos), level.getBlockState(pos), 3);
+            }
+        }
+
+        if (hasTickFactory) {
+            zhenType.getTickFactory().apply(new SmallSiftMethod(level, pos, level.getBlockState(pos), null)).run();
+        }
+    }
+
+    @Override
+    public VoxelShape getShape() {
+        return Shapes.block();
+    }
+
+    @Override
+    public void setChangeCallback(Runnable onChanged) {
+        this.onChanged = onChanged;
+    }
+
+    @Override
+    public boolean onActivate(Player player, InteractionHand hand, Vec3 hitPos) {
+        return false;
+    }
+
+    @Override
+    public boolean onShiftActivate(Player player, InteractionHand hand, Vec3 hitPos) {
+        return false;
+    }
+
+    @Override
+    public void addDrops(List<ItemStack> drops) {
+        for (ItemStack stack : items) {
+            if (!stack.isEmpty()) {
+                drops.add(stack);
+            }
+        }
+    }
+
+    @Override
+    public void onAdd() {
+        scanAllPorts();
+    }
+
+    @Override
+    public void onRemove() {
+        invalidatePorts();
+    }
+
+    @Override
+    public @Nullable NonNullList<ItemStack> getItemsForSerialization() {
+        return items;
+    }
+
+    @Override
+    public @Nullable NonNullList<FluidStack> getFluidsForSerialization() {
+        return tanks;
+    }
+
+    @Override
+    public int getProcessTime() {
+        return processTime;
+    }
+
+    @Override
+    public void setProcessTime(int time) {
+        this.processTime = time;
+    }
+
+    @Override
+    public void writeToNBT(ValueOutput output) {
+        output.putString("side", side.getName());
+        output.putInt("process_time", processTime);
+        output.putBoolean("inputs_changed", inputsChanged);
+        ContainerHelper.saveAllItems(output, items);
+        for (int i = 0; i < tanks.size(); i++) {
+            if (!tanks.get(i).isEmpty()) {
+                output.store("FluidTank_" + i, FluidStack.CODEC, tanks.get(i));
+            }
+        }
+        for (IOComponent<?, ?> component : ioProcessor.getAll()) {
+            component.saveNBT(output);
+        }
+        if (currentRecipe != null) {
+            output.putString("current_recipe", currentRecipe.getRecipeType());
+        }
+    }
+
+    @Override
+    public void readFromNBT(ValueInput input) {
+        processTime = input.getIntOr("process_time", 0);
+        inputsChanged = input.getBooleanOr("inputs_changed", false);
+        ContainerHelper.loadAllItems(input, items);
+        for (int i = 0; i < tanks.size(); i++) {
+            tanks.set(i, input.read("FluidTank_" + i, FluidStack.CODEC).orElse(FluidStack.EMPTY));
+        }
+        for (IOComponent<?, ?> component : ioProcessor.getAll()) {
+            component.loadNBT(input);
+        }
+    }
+
+    @Override
+    public void writeToStream(FriendlyByteBuf buf) {
+        buf.writeInt(processTime);
+        buf.writeBoolean(currentRecipe != null);
+    }
+
+    @Override
+    public boolean readFromStream(FriendlyByteBuf buf) {
+        boolean changed = false;
+        int newProcessTime = buf.readInt();
+        if (newProcessTime != processTime) {
+            processTime = newProcessTime;
+            changed = true;
+        }
+        boolean hasRecipe = buf.readBoolean();
+        if ((currentRecipe != null) != hasRecipe) {
+            changed = true;
+        }
+        return changed;
+    }
+}

@@ -20,6 +20,10 @@ public class ItemIOComponent implements IOComponent<Ingredient, ItemStack> {
         this.partition = partition;
     }
 
+    public NonNullList<ItemStack> getItems() {
+        return items;
+    }
+
     @Override
     public IOType type() {
         return ModIOTypes.ITEM.get();

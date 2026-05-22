@@ -2,6 +2,7 @@ package com.yhzcake.magicio;
 
 import java.io.InputStream;
 import java.util.Map;
+import java.util.Set;
 
 import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;
@@ -12,16 +13,20 @@ import com.yhzcake.magicio.block.entity.AbstractZhenBlockEntity;
 import com.yhzcake.magicio.block.entity.ModBlockEntities;
 import com.yhzcake.magicio.block.zhen.ZhenType;
 import com.yhzcake.magicio.block.zhen.ZhenTypes;
+import com.yhzcake.magicio.block.zhenbus.ModZhenBusBlocks;
 import com.yhzcake.magicio.config.Config;
+import com.yhzcake.magicio.io.EnergyIOComponent;
+import com.yhzcake.magicio.io.FluidIOComponent;
+import com.yhzcake.magicio.io.IOType;
+import com.yhzcake.magicio.io.ItemIOComponent;
+import com.yhzcake.magicio.io.ModIOTypes;
+import com.yhzcake.magicio.io.SideProcessor;
 import com.yhzcake.magicio.item.ModDataComponents;
 import com.yhzcake.magicio.item.ModItems;
 import com.yhzcake.magicio.item.crafting.ModRecipeManager;
 import com.yhzcake.magicio.item.crafting.ZhenRecipe;
 import com.yhzcake.magicio.item.crafting.ZhenRecipeLoader;
 import com.yhzcake.magicio.item.crafting.ZhenRecipeManager;
-import com.yhzcake.magicio.io.EnergyIOComponent;
-import com.yhzcake.magicio.io.IOType;
-import com.yhzcake.magicio.io.ModIOTypes;
 import com.yhzcake.magicio.utils.ElementType;
 import com.yhzcake.magicio.utils.ElementTypes;
 
@@ -31,7 +36,7 @@ import net.minecraft.server.packs.resources.Resource;
 import net.minecraft.server.packs.resources.ResourceManager;
 import net.minecraft.server.packs.resources.SimplePreparableReloadListener;
 import net.minecraft.util.profiling.ProfilerFiller;
-
+import net.minecraft.core.Direction;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.network.chat.Component;
@@ -56,6 +61,7 @@ import net.neoforged.neoforge.registries.DeferredBlock;
 import net.neoforged.neoforge.registries.DeferredHolder;
 import net.neoforged.neoforge.registries.DeferredItem;
 import net.neoforged.neoforge.registries.DeferredRegister;
+import net.neoforged.neoforge.capabilities.BlockCapability;
 import net.neoforged.neoforge.capabilities.Capabilities;
 import net.neoforged.neoforge.capabilities.RegisterCapabilitiesEvent;
 import net.neoforged.neoforge.transfer.fluid.FluidStacksResourceHandler;
@@ -74,6 +80,8 @@ public class MagicIO {
     public static final DeferredItem<Item> EXAMPLE_ITEM = ITEMS.registerSimpleItem("example_item", p -> p.food(new FoodProperties.Builder()
             .alwaysEdible().nutrition(1).saturationModifier(2f).build()));
 
+    public static final DeferredItem<BlockItem> ZHEN_BUS_ITEM = ITEMS.registerSimpleBlockItem("zhen_bus", ModZhenBusBlocks.ZHEN_BUS);
+
     public static final DeferredHolder<CreativeModeTab, CreativeModeTab> EXAMPLE_TAB = CREATIVE_MODE_TABS.register("example_tab", () -> CreativeModeTab.builder()
             .title(Component.translatable("itemGroup.magic_io"))
             .withTabsBefore(CreativeModeTabs.COMBAT)
@@ -83,6 +91,7 @@ public class MagicIO {
                 for (var blockItem : ModBlocks.ZHEN_BLOCK_ITEMS.values()) {
                     output.accept(blockItem.get());
                 }
+                output.accept(ZHEN_BUS_ITEM.get());
             }).build());
 
     public MagicIO(IEventBus modEventBus, net.neoforged.fml.ModContainer modContainer) {
@@ -99,6 +108,8 @@ public class MagicIO {
         ModBlocks.registerZhenBlockItems(ITEMS);
         BLOCKS.register(modEventBus);
         ITEMS.register(modEventBus);
+        ModZhenBusBlocks.BLOCKS.register(modEventBus);
+        ModZhenBusBlocks.BLOCK_ENTITIES.register(modEventBus);
         ModBlockEntities.BLOCK_ENTITIES.register(modEventBus);
         ModItems.register(modEventBus);
         ModRecipeManager.register(modEventBus);
@@ -129,6 +140,44 @@ public class MagicIO {
                     EnergyIOComponent energyComponent = ((AbstractZhenBlockEntity) be).getEnergyIOComponent();
                     if (energyComponent == null) return null;
                     return energyComponent.getHandler();
+                }
+        );
+
+        // ZhenBus 按面分发
+        registerZhenBusCap(event, Capabilities.Item.BLOCK, ModIOTypes.ITEM.get(), (comp) -> {
+            if (!(comp instanceof ItemIOComponent itemIO)) return null;
+            return new net.neoforged.neoforge.transfer.item.ItemStacksResourceHandler(itemIO.getItems());
+        });
+        registerZhenBusCap(event, Capabilities.Fluid.BLOCK, ModIOTypes.FLUID.get(), (comp) -> {
+            if (!(comp instanceof FluidIOComponent fluidComp)) return null;
+            return new FluidStacksResourceHandler(fluidComp.getTanks(),
+                    fluidComp.getTankCapacity() != null ? fluidComp.getTankCapacity() : 0);
+        });
+        registerZhenBusCap(event, Capabilities.Energy.BLOCK, ModIOTypes.ENERGY.get(), (comp) -> {
+            if (!(comp instanceof EnergyIOComponent energyComp)) return null;
+            return energyComp.getHandler();
+        });
+    }
+
+    private static <T, C> void registerZhenBusCap(RegisterCapabilitiesEvent event,
+            BlockCapability<T, @Nullable Direction> cap, IOType ioType,
+            java.util.function.Function<Object, T> handlerFactory) {
+        event.registerBlockEntity(
+                (BlockCapability<T, @Nullable Direction>) cap,
+                ModZhenBusBlocks.ZHEN_BUS_BE.get(),
+                (be, direction) -> {
+                    if (direction == null) return null;
+                    SideProcessor processor = be.getProcessor(direction);
+                    if (processor == null) return null;
+                    if (ioType != ModIOTypes.ENERGY.get()) {
+                        Map<IOType, Set<Integer>> access = processor.getFaceAccess(direction);
+                        if (access == null) return null;
+                        Set<Integer> slots = access.get(ioType);
+                        if (slots == null || slots.isEmpty()) return null;
+                    }
+                    Object component = processor.getIOProcessor().get(ioType);
+                    if (component == null) return null;
+                    return handlerFactory.apply(component);
                 }
         );
     }
@@ -193,7 +242,7 @@ public class MagicIO {
             }
         }
 
-        LOGGER.info("配方加载完成，共加载 {} 个配方", ZhenRecipeManager.getInstance().getRecipes().size());
+        LOGGER.info("配方加载完成，共加载 {} 个配方", ZhenRecipeManager.getInstance().getRecipeCount());
     }
 
     @SubscribeEvent

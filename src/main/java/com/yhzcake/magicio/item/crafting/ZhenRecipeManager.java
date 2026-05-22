@@ -7,14 +7,16 @@ import net.minecraft.world.level.Level;
 import com.yhzcake.magicio.block.inventory.SlotPartition;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 public class ZhenRecipeManager {
     private static ZhenRecipeManager INSTANCE;
-    private final List<ZhenRecipe> recipes;
+    private final Map<String, List<ZhenRecipe>> recipesByType;
 
     private ZhenRecipeManager() {
-        this.recipes = new ArrayList<>();
+        this.recipesByType = new HashMap<>();
     }
 
     public static ZhenRecipeManager getInstance() {
@@ -25,16 +27,22 @@ public class ZhenRecipeManager {
     }
 
     public void addRecipe(ZhenRecipe recipe) {
-        recipes.add(recipe);
+        recipesByType.computeIfAbsent(recipe.getTypeStr(), k -> new ArrayList<>()).add(recipe);
     }
 
-    public List<ZhenRecipe> getRecipes() {
-        return recipes;
+    public int getRecipeCount() {
+        return recipesByType.values().stream().mapToInt(List::size).sum();
+    }
+
+    public List<ZhenRecipe> getRecipes(String type) {
+        return recipesByType.getOrDefault(type, List.of());
     }
 
     public ZhenRecipe findRecipe(String type, NonNullList<ItemStack> allItems, SlotPartition partition, Level level) {
-        for (ZhenRecipe recipe : recipes) {
-            if (recipe.getTypeStr().equals(type) && recipe.matches(allItems, partition, level)) {
+        List<ZhenRecipe> candidates = recipesByType.get(type);
+        if (candidates == null) return null;
+        for (ZhenRecipe recipe : candidates) {
+            if (recipe.matches(allItems, partition, level)) {
                 return recipe;
             }
         }
@@ -42,6 +50,6 @@ public class ZhenRecipeManager {
     }
 
     public void clearRecipes() {
-        recipes.clear();
+        recipesByType.clear();
     }
 }
