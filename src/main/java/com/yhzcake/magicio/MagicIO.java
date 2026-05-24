@@ -219,7 +219,7 @@ public class MagicIO {
 
         Map<Identifier, Resource> resources = resourceManager.listResources(
             "recipe",
-            (path) -> path.getPath().endsWith(".json") && path.getPath().contains("sift")
+            (path) -> path.getPath().endsWith(".json") && path.getNamespace().equals(MagicIO.MOD_ID)
         );
 
         for (Map.Entry<Identifier, Resource> entry : resources.entrySet()) {

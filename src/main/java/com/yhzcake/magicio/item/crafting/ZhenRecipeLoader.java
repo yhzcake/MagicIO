@@ -82,8 +82,12 @@ public class ZhenRecipeLoader {
                     for (JsonElement element : inputsElement.getAsJsonArray()) {
                         JsonObject inputObj = element.getAsJsonObject();
                         String item = inputObj.get("item").getAsString();
+                        int count = Math.max(1, inputObj.has("count") ? inputObj.get("count").getAsInt() : 1);
                         Identifier itemId = Identifier.parse(item);
-                        BuiltInRegistries.ITEM.get(itemId).ifPresent(holder -> flat.add(Ingredient.of(holder.value())));
+                        BuiltInRegistries.ITEM.get(itemId).ifPresent(holder -> {
+                            Ingredient ing = Ingredient.of(holder.value());
+                            for (int i = 0; i < count; i++) flat.add(ing);
+                        });
                     }
                     inputs.add(new RecipeInput<>(ModIOTypes.ITEM.get(), SlotZone.ITEM_INPUT_ALL.getName(), flat));
                 } else if (inputsElement.isJsonObject()) {
@@ -92,8 +96,12 @@ public class ZhenRecipeLoader {
                         for (JsonElement element : entry.getValue().getAsJsonArray()) {
                             JsonObject inputObj = element.getAsJsonObject();
                             String item = inputObj.get("item").getAsString();
+                            int count = Math.max(1, inputObj.has("count") ? inputObj.get("count").getAsInt() : 1);
                             Identifier itemId = Identifier.parse(item);
-                            BuiltInRegistries.ITEM.get(itemId).ifPresent(holder -> ingredients.add(Ingredient.of(holder.value())));
+                            BuiltInRegistries.ITEM.get(itemId).ifPresent(holder -> {
+                                Ingredient ing = Ingredient.of(holder.value());
+                                for (int i = 0; i < count; i++) ingredients.add(ing);
+                            });
                         }
                         inputs.add(new RecipeInput<>(ModIOTypes.ITEM.get(), entry.getKey(), ingredients));
                     }

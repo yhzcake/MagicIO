@@ -5,6 +5,7 @@ import java.util.Set;
 
 import com.yhzcake.magicio.block.inventory.SlotPartition;
 import com.yhzcake.magicio.block.inventory.SlotZone;
+import com.yhzcake.magicio.io.FluidIOComponent;
 import com.yhzcake.magicio.io.IOProcessor;
 import com.yhzcake.magicio.io.ModIOTypes;
 import com.yhzcake.magicio.io.WorldDropIOComponent;
@@ -13,9 +14,11 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.core.NonNullList;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.crafting.Ingredient;
 import net.minecraft.world.level.Level;
+import net.minecraft.world.phys.Vec3;
 import net.neoforged.neoforge.fluids.FluidStack;
 
 @SuppressWarnings("unchecked")
@@ -29,6 +32,7 @@ public class RecipeProcessor {
         public boolean inputsChanged = false;
         public ZhenRecipe currentRecipe = null;
         public int recipeCheckTimer = 0;
+        public ZhenRecipe lastValidRecipe = null;
     }
 
     /**
@@ -44,6 +48,7 @@ public class RecipeProcessor {
      * @param tanks         流体槽（可以被直接修改）
      * @param ioProcessor   IO 处理器
      * @param zoneFaceAccess 区域-面映射（用于 DROP_OUTPUT 方向）
+     * @param centerDrop    是否在方块正中心掉落（false 则在 DROP_OUTPUT 面外侧掉落）
      * @param onChanged     数据变更回调（标记脏数据）
      * @return true 表示需要网络同步（方块外观变更）
      */
@@ -57,6 +62,7 @@ public class RecipeProcessor {
             NonNullList<FluidStack> tanks,
             IOProcessor ioProcessor,
             Map<Direction, Set<String>> zoneFaceAccess,
+            boolean centerDrop,
             Runnable onChanged
     ) {
         boolean needSync = false;
@@ -97,7 +103,7 @@ public class RecipeProcessor {
 
                 // 配方完成
                 if (state.processTime >= state.currentRecipe.getProcessingTime()) {
-                    if (tryCompleteRecipe(level, pos, state, partition, items, tanks, ioProcessor, zoneFaceAccess, onChanged)) {
+                    if (tryCompleteRecipe(level, pos, state, partition, items, tanks, ioProcessor, zoneFaceAccess, centerDrop, onChanged)) {
                         state.processTime = 0;
                         state.currentRecipe = null;
                     } else {
@@ -120,7 +126,15 @@ public class RecipeProcessor {
     private static boolean findRecipeFromCache(State state, String zhenType,
             NonNullList<ItemStack> items, NonNullList<FluidStack> tanks,
             SlotPartition partition, Level level) {
-        // 当前实现没有缓存 lastRecipe，保留此扩展点
+        if (state.lastValidRecipe == null) return false;
+        if (state.lastValidRecipe.matches(items, partition, level)
+                && state.lastValidRecipe.matchesFluid(tanks, partition)) {
+            state.currentRecipe = state.lastValidRecipe;
+            state.processTime = 0;
+            state.inputsChanged = false;
+            return true;
+        }
+        state.lastValidRecipe = null;
         return false;
     }
 
@@ -131,6 +145,7 @@ public class RecipeProcessor {
                 zhenType, items, partition, level);
         if (newRecipe != null && newRecipe.matchesFluid(tanks, partition)) {
             state.currentRecipe = newRecipe;
+            state.lastValidRecipe = newRecipe;
             state.processTime = 0;
             state.inputsChanged = false;
         }
@@ -150,6 +165,7 @@ public class RecipeProcessor {
             NonNullList<FluidStack> tanks,
             IOProcessor ioProcessor,
             Map<Direction, Set<String>> zoneFaceAccess,
+            boolean centerDrop,
             Runnable onChanged
     ) {
         ZhenRecipe recipe = state.currentRecipe;
@@ -158,11 +174,19 @@ public class RecipeProcessor {
         Map<String, NonNullList<ItemStack>> zoneOutputs = recipe.rollOutput(serverLevel);
         Map<String, NonNullList<FluidStack>> fluidOutputs = recipe.rollFluidOutput();
 
+        // 获取实际流体罐容量
+        int tankCapacity = 0;
+        Object rawFluid = ioProcessor.get(ModIOTypes.FLUID.get());
+        if (rawFluid instanceof FluidIOComponent fluidComp) {
+            Integer cap = fluidComp.getTankCapacity();
+            if (cap != null) tankCapacity = cap;
+        }
+
         // 预检：所有输入输出是否可满足
         if (!canProcess(recipe, partition, ioProcessor)) return false;
         if (!canFitAllZoneItems(zoneOutputs, partition, items, ioProcessor)) return false;
         if (!canConsumeAllZoneItems(recipe, partition, items)) return false;
-        if (!canFitFluidZoneOutputs(fluidOutputs, partition, tanks)) return false;
+        if (!canFitFluidZoneOutputs(fluidOutputs, partition, tanks, tankCapacity)) return false;
         if (!canConsumeAllFluids(recipe, partition, tanks)) return false;
 
         // 执行消耗
@@ -183,7 +207,7 @@ public class RecipeProcessor {
         // 执行产出
         for (RecipeOutput<?> output : recipe.getOutputs()) {
             if (output.zoneName().equals(SlotZone.DROP_OUTPUT.getName())) {
-                handleDropOutput(level, pos, zoneOutputs, zoneFaceAccess);
+                handleDropOutput(level, pos, zoneOutputs, zoneFaceAccess, centerDrop);
             } else if (output.type() == ModIOTypes.ITEM.get()) {
                 SlotZone zone = partition.getZoneByName(output.zoneName());
                 if (zone != null) {
@@ -197,7 +221,7 @@ public class RecipeProcessor {
                 if (zone != null) {
                     NonNullList<FluidStack> outputFluids = fluidOutputs.get(output.zoneName());
                     if (outputFluids != null) {
-                        produceFluidInZone(zone, outputFluids, partition, tanks);
+                        produceFluidInZone(zone, outputFluids, partition, tanks, tankCapacity);
                     }
                 }
             }
@@ -340,12 +364,13 @@ public class RecipeProcessor {
     }
 
     private static boolean canFitFluidZoneOutputs(Map<String, NonNullList<FluidStack>> fluidOutputs,
-            SlotPartition partition, NonNullList<FluidStack> tanks) {
+            SlotPartition partition, NonNullList<FluidStack> tanks, int tankCapacity) {
+        if (tankCapacity <= 0) return false;
         for (Map.Entry<String, NonNullList<FluidStack>> entry : fluidOutputs.entrySet()) {
             SlotZone zone = partition.getZoneByName(entry.getKey());
             if (zone == null) return false;
             for (FluidStack fluid : entry.getValue()) {
-                if (!fluid.isEmpty() && !canFitFluid(zone, fluid, partition, tanks, Integer.MAX_VALUE)) {
+                if (!fluid.isEmpty() && !canFitFluid(zone, fluid, partition, tanks, tankCapacity)) {
                     return false;
                 }
             }
@@ -428,10 +453,11 @@ public class RecipeProcessor {
     }
 
     private static void produceFluidInZone(SlotZone zone, NonNullList<FluidStack> fluids,
-            SlotPartition partition, NonNullList<FluidStack> tanks) {
+            SlotPartition partition, NonNullList<FluidStack> tanks, int tankCapacity) {
+        if (tankCapacity <= 0) return;
         for (FluidStack fluid : fluids) {
             if (!fluid.isEmpty()) {
-                insertFluidInZone(zone, fluid.copy(), false, partition, tanks, Integer.MAX_VALUE);
+                insertFluidInZone(zone, fluid.copy(), false, partition, tanks, tankCapacity);
             }
         }
     }
@@ -442,8 +468,12 @@ public class RecipeProcessor {
             Level level,
             BlockPos pos,
             Map<String, NonNullList<ItemStack>> zoneOutputs,
-            Map<Direction, Set<String>> zoneFaceAccess
+            Map<Direction, Set<String>> zoneFaceAccess,
+            boolean centerDrop
     ) {
+        NonNullList<ItemStack> dropItems = zoneOutputs.get(SlotZone.DROP_OUTPUT.getName());
+        if (dropItems == null || dropItems.isEmpty()) return;
+
         Direction dropDir = Direction.UP;
         for (Direction dir : Direction.values()) {
             if (zoneFaceAccess.getOrDefault(dir, Set.of()).contains(SlotZone.DROP_OUTPUT.getName())) {
@@ -451,9 +481,19 @@ public class RecipeProcessor {
                 break;
             }
         }
-        WorldDropIOComponent dropComponent = new WorldDropIOComponent(level, pos, dropDir);
-        NonNullList<ItemStack> dropItems = zoneOutputs.get(SlotZone.DROP_OUTPUT.getName());
-        if (dropItems != null) {
+
+        if (centerDrop) {
+            boolean canDrop = level.getBlockState(pos.relative(dropDir)).isAir();
+            if (!canDrop) return;
+            Vec3 center = Vec3.atCenterOf(pos);
+            for (ItemStack stack : dropItems) {
+                if (stack.isEmpty()) continue;
+                ItemEntity item = new ItemEntity(level, center.x, center.y - 0.5, center.z, stack, 0, 0, 0);
+                item.setDefaultPickUpDelay();
+                level.addFreshEntity(item);
+            }
+        } else {
+            WorldDropIOComponent dropComponent = new WorldDropIOComponent(level, pos, dropDir);
             for (ItemStack stack : dropItems) {
                 dropComponent.produce(stack);
             }

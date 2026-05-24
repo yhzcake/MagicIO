@@ -9,6 +9,7 @@ import java.util.Set;
 import org.jspecify.annotations.Nullable;
 
 import com.yhzcake.magicio.block.entity.method.SmallSiftMethod;
+import com.yhzcake.magicio.block.inventory.FaceAccessController;
 import com.yhzcake.magicio.block.inventory.SlotPartition;
 import com.yhzcake.magicio.block.inventory.SlotZone;
 import com.yhzcake.magicio.block.zhen.ZhenType;
@@ -50,7 +51,7 @@ public abstract class AbstractSideProcessor implements SideProcessor {
     protected boolean inputsChanged = false;
     protected @Nullable ZhenRecipe currentRecipe;
     protected Runnable onChanged = () -> {};
-    protected Map<Direction, Set<String>> zoneFaceAccess = Collections.emptyMap();
+    protected final FaceAccessController faceAccessController = new FaceAccessController();
 
     private int tickInterval = 1;
     private int tickCounter = 0;
@@ -81,6 +82,7 @@ public abstract class AbstractSideProcessor implements SideProcessor {
         initIOComponents();
         initVirtualPorts();
         initSlotCache();
+        initFaceAccess();
     }
 
     private void initIOComponents() {
@@ -101,6 +103,34 @@ public abstract class AbstractSideProcessor implements SideProcessor {
         outputItemSlots = Set.copyOf(partition.getSlots(ModIOTypes.ITEM.get(), SlotZone.ITEM_OUTPUT_ALL));
         inputFluidSlots = Set.copyOf(partition.getSlots(ModIOTypes.FLUID.get(), SlotZone.FLUID_INPUT_ALL));
         outputFluidSlots = Set.copyOf(partition.getSlots(ModIOTypes.FLUID.get(), SlotZone.FLUID_OUTPUT_ALL));
+    }
+
+    private void initFaceAccess() {
+        Map<Direction, Map<IOType, Set<Integer>>> defined = zhenType.getFaceAccess();
+        if (!defined.isEmpty()) {
+            for (var dirEntry : defined.entrySet()) {
+                Direction dir = dirEntry.getKey();
+                for (var typeEntry : dirEntry.getValue().entrySet()) {
+                    faceAccessController.setSlotsForFace(dir, typeEntry.getKey(), typeEntry.getValue());
+                }
+            }
+            return;
+        }
+        if (!inputItemSlots.isEmpty()) {
+            faceAccessController.setSlotsForFace(side, ModIOTypes.ITEM.get(), inputItemSlots);
+        }
+        if (!outputItemSlots.isEmpty()) {
+            faceAccessController.addSlotsToFaceAccess(side, ModIOTypes.ITEM.get(), outputItemSlots);
+        }
+        if (!inputFluidSlots.isEmpty()) {
+            faceAccessController.setSlotsForFace(side, ModIOTypes.FLUID.get(), inputFluidSlots);
+        }
+        if (!outputFluidSlots.isEmpty()) {
+            faceAccessController.addSlotsToFaceAccess(side, ModIOTypes.FLUID.get(), outputFluidSlots);
+        }
+        if (energyCapacity != null) {
+            faceAccessController.setSlotsForFace(side, ModIOTypes.ENERGY.get(), Set.of(0));
+        }
     }
 
     // ============ VirtualPort 管理 ============
@@ -151,26 +181,8 @@ public abstract class AbstractSideProcessor implements SideProcessor {
 
     @Override
     public @Nullable Map<IOType, Set<Integer>> getFaceAccess(Direction worldDirection) {
-        // 优先使用 ZhenType 中定义的面 IO 配置
-        Map<Direction, Map<IOType, Set<Integer>>> defined = zhenType.getFaceAccess();
-        if (!defined.isEmpty()) {
-            return defined.get(worldDirection);
-        }
-        // 默认约定：本面方向暴露输出槽，反方向暴露输入槽，其他方向不暴露
-        if (worldDirection == side) {
-            Map<IOType, Set<Integer>> result = new HashMap<>();
-            if (!outputItemSlots.isEmpty()) result.put(ModIOTypes.ITEM.get(), outputItemSlots);
-            if (!outputFluidSlots.isEmpty()) result.put(ModIOTypes.FLUID.get(), outputFluidSlots);
-            if (energyCapacity != null) result.put(ModIOTypes.ENERGY.get(), Set.of(0));
-            return result.isEmpty() ? null : result;
-        }
-        if (worldDirection == side.getOpposite()) {
-            Map<IOType, Set<Integer>> result = new HashMap<>();
-            if (!inputItemSlots.isEmpty()) result.put(ModIOTypes.ITEM.get(), inputItemSlots);
-            if (!inputFluidSlots.isEmpty()) result.put(ModIOTypes.FLUID.get(), inputFluidSlots);
-            return result.isEmpty() ? null : result;
-        }
-        return null;
+        Map<Direction, Map<IOType, Set<Integer>>> raw = faceAccessController.getIoFaceAccess();
+        return raw.get(worldDirection);
     }
 
     // ============ VirtualPort 产出推送 ============
@@ -300,7 +312,9 @@ public abstract class AbstractSideProcessor implements SideProcessor {
 
             boolean needSync = RecipeProcessor.processTick(
                     level, pos, recipeState, zhenType.getType(),
-                    partition, items, tanks, ioProcessor, zoneFaceAccess, onChanged);
+                    partition, items, tanks, ioProcessor, faceAccessController.getZoneFaceAccess(),
+                    true,
+                    onChanged);
 
             this.processTime = recipeState.processTime;
             this.inputsChanged = recipeState.inputsChanged;

@@ -52,7 +52,8 @@ public class WorldDropIOComponent implements IOComponent<Object, ItemStack> {
 
     @Override
     public boolean canFit(int slot, ItemStack value) {
-        return true;
+        if (level == null || value.isEmpty()) return false;
+        return level.getBlockState(pos.relative(dropDirection)).isAir();
     }
 
     @Override
