@@ -2,6 +2,7 @@ package com.yhzcake.magicio.item.crafting;
 
 import com.yhzcake.magicio.MagicIO;
 import com.yhzcake.magicio.block.inventory.SlotZone;
+import com.yhzcake.magicio.block.zhen.ZhenType;
 import com.yhzcake.magicio.io.ModIOTypes;
 import com.google.gson.*;
 import net.minecraft.server.MinecraftServer;
@@ -69,7 +70,10 @@ public class ZhenRecipeLoader {
             Gson gson = new Gson();
             JsonObject json = gson.fromJson(reader, JsonObject.class);
 
-            String type = json.get("type").getAsString();
+            Identifier typeId = Identifier.parse(json.get("type").getAsString());
+            if (ZhenType.ZHEN_TYPES != null) {
+                ZhenType.ZHEN_TYPES.get(typeId).orElseThrow(() -> new IllegalArgumentException("Unknown ZhenType: " + typeId));
+            }
             int processingTime = json.get("processing_time").getAsInt();
 
             List<RecipeInput<?>> inputs = new ArrayList<>();
@@ -196,7 +200,7 @@ public class ZhenRecipeLoader {
                 }
             }
 
-            return new ZhenRecipe(type, inputs, outputs, processingTime);
+            return new ZhenRecipe(typeId, inputs, outputs, processingTime);
         } catch (Exception e) {
             MagicIO.LOGGER.warn("Failed to load recipe from JSON: {}", e.getMessage());
             return null;

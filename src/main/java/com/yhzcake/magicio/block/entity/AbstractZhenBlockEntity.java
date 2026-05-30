@@ -142,8 +142,8 @@ public abstract class AbstractZhenBlockEntity extends BaseContainerBlockEntity i
             faceAccessController.setSlotsForFace(direction, ModIOTypes.ITEM.get(), partition.getSlots(ModIOTypes.ITEM.get(), SlotZone.ITEM_INPUT_ALL));
             faceAccessController.setZoneForFace(direction, SlotZone.ITEM_INPUT_ALL.getName());
         }
-        faceAccessController.setSlotsForFace(Direction.UP, ModIOTypes.FLUID.get(), partition.getSlots(ModIOTypes.FLUID.get(), SlotZone.FLUID_INPUT_ALL));
-        faceAccessController.setSlotsForFace(Direction.DOWN, ModIOTypes.FLUID.get(), partition.getSlots(ModIOTypes.FLUID.get(), SlotZone.FLUID_OUTPUT_ALL));
+        faceAccessController.setSlotsForFace(Direction.UP, ModIOTypes.FLUID.get(), partition.getSlots(ModIOTypes.FLUID.get(), SlotZone.FLUID_ALL));
+        faceAccessController.setSlotsForFace(Direction.DOWN, ModIOTypes.FLUID.get(), partition.getSlots(ModIOTypes.FLUID.get(), SlotZone.FLUID_ALL));
         if (energyCapacity != null) {
             for (Direction direction : Direction.values()) {
                 faceAccessController.setSlotsForFace(direction, ModIOTypes.ENERGY.get(), partition.getSlots(ModIOTypes.ENERGY.get(), SlotZone.ENERGY_INPUT_ALL));
@@ -563,9 +563,7 @@ public abstract class AbstractZhenBlockEntity extends BaseContainerBlockEntity i
             level.sendBlockUpdated(pos, state, state, 3);
         }
 
-        if (be.type.getTickFactory() != null) {
-            be.type.execute(level, pos, state, be);
-        }
+        be.type.execute(level, pos, state, be);
     }
 
     public boolean hasItemIngredients(NonNullList<Ingredient> ingredients) {

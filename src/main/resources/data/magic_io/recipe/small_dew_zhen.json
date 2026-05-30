@@ -1,0 +1,9 @@
+{
+    "type": "magic_io:small_dew_zhen",
+    "processing_time": 10,
+    "fluid_outputs": {
+        "fluid_all": [
+            {"fluid": "minecraft:water", "amount": 20}
+        ]
+    }
+}

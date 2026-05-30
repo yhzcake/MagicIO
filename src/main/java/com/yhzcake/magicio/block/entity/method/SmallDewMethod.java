@@ -6,8 +6,8 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.state.BlockState;
 
-public class SmallSiftMethod extends ZhenMethod {
-    public SmallSiftMethod(Level level, BlockPos pos, BlockState state, AbstractZhenBlockEntity blockEntity) {
+public class SmallDewMethod extends ZhenMethod {
+    public SmallDewMethod(Level level, BlockPos pos, BlockState state, AbstractZhenBlockEntity blockEntity) {
         super(level, pos, state, blockEntity);
     }
 
@@ -15,6 +15,6 @@ public class SmallSiftMethod extends ZhenMethod {
     public void run() {
     }
 
-    public void small_sift_tick() {
+    public void small_dew_tick() {
     }
 }

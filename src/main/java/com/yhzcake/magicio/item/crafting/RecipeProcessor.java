@@ -260,6 +260,7 @@ public class RecipeProcessor {
     private static boolean canFitAllZoneItems(Map<String, NonNullList<ItemStack>> zoneOutputs,
             SlotPartition partition, NonNullList<ItemStack> items, IOProcessor ioProcessor) {
         for (Map.Entry<String, NonNullList<ItemStack>> entry : zoneOutputs.entrySet()) {
+            if (entry.getKey().equals(SlotZone.DROP_OUTPUT.getName())) continue;
             SlotZone zone = partition.getZoneByName(entry.getKey());
             if (zone == null) return false;
             if (!canFitItem(zone, entry.getValue(), partition, items)) return false;
@@ -365,6 +366,7 @@ public class RecipeProcessor {
 
     private static boolean canFitFluidZoneOutputs(Map<String, NonNullList<FluidStack>> fluidOutputs,
             SlotPartition partition, NonNullList<FluidStack> tanks, int tankCapacity) {
+        if (fluidOutputs.isEmpty()) return true;
         if (tankCapacity <= 0) return false;
         for (Map.Entry<String, NonNullList<FluidStack>> entry : fluidOutputs.entrySet()) {
             SlotZone zone = partition.getZoneByName(entry.getKey());

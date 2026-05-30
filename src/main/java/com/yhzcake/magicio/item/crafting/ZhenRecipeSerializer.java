@@ -85,7 +85,7 @@ public class ZhenRecipeSerializer {
             ));
 
     private static ZhenRecipe buildFromParsed(
-            String type,
+            Identifier type,
             Map<String, NonNullList<Ingredient>> itemInputs,
             Map<String, NonNullList<OutputEntry>> itemOutputs,
             Map<String, NonNullList<ZhenRecipe.FluidIngredient>> fluidInputs,
@@ -128,7 +128,7 @@ public class ZhenRecipeSerializer {
 
     public static final MapCodec<ZhenRecipe> CODEC = RecordCodecBuilder.mapCodec(
             instance -> instance.group(
-                    Codec.STRING.fieldOf("type").forGetter(r -> r.getRecipeType()),
+                    Identifier.CODEC.fieldOf("type").forGetter(ZhenRecipe::getRecipeTypeId),
                     INPUT_MAP_CODEC.fieldOf("inputs").forGetter(
                             r -> {
                                 Map<String, NonNullList<Ingredient>> map = new java.util.LinkedHashMap<>();
@@ -185,7 +185,7 @@ public class ZhenRecipeSerializer {
                 java.util.List<RecipeInput<?>> inputs = recipe.getInputs();
                 java.util.List<RecipeOutput<?>> outputs = recipe.getOutputs();
 
-                buf.writeUtf(recipe.getRecipeType());
+                Identifier.STREAM_CODEC.encode(buf, recipe.getRecipeTypeId());
 
                 java.util.List<RecipeInput<?>> itemInputs = new java.util.ArrayList<>();
                 java.util.List<RecipeInput<?>> fluidInputsList = new java.util.ArrayList<>();
@@ -249,7 +249,7 @@ public class ZhenRecipeSerializer {
                 buf.writeInt(recipe.getProcessingTime());
             },
             buf -> {
-                String type = buf.readUtf();
+                Identifier type = Identifier.STREAM_CODEC.decode(buf);
 
                 int inputZoneCount = buf.readInt();
                 java.util.List<RecipeInput<?>> inputs = new java.util.ArrayList<>();

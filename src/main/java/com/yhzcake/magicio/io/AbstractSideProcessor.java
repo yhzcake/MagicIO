@@ -8,7 +8,6 @@ import java.util.Set;
 
 import org.jspecify.annotations.Nullable;
 
-import com.yhzcake.magicio.block.entity.method.SmallSiftMethod;
 import com.yhzcake.magicio.block.inventory.FaceAccessController;
 import com.yhzcake.magicio.block.inventory.SlotPartition;
 import com.yhzcake.magicio.block.inventory.SlotZone;
@@ -58,11 +57,10 @@ public abstract class AbstractSideProcessor implements SideProcessor {
 
     private final Map<String, VirtualPort> virtualPorts = new HashMap<>();
 
-    // 输出槽位集合缓存（由 initIOComponents 初始化）
+    // 槽位集合缓存（由 initIOComponents 初始化）
     private Set<Integer> outputItemSlots = Set.of();
-    private Set<Integer> outputFluidSlots = Set.of();
     private Set<Integer> inputItemSlots = Set.of();
-    private Set<Integer> inputFluidSlots = Set.of();
+    private Set<Integer> fluidSlots = Set.of();
 
     public AbstractSideProcessor(Direction side, ZhenType zhenType, BlockPos pos, Level level) {
         this.side = side;
@@ -101,8 +99,7 @@ public abstract class AbstractSideProcessor implements SideProcessor {
     private void initSlotCache() {
         inputItemSlots = Set.copyOf(partition.getSlots(ModIOTypes.ITEM.get(), SlotZone.ITEM_INPUT_ALL));
         outputItemSlots = Set.copyOf(partition.getSlots(ModIOTypes.ITEM.get(), SlotZone.ITEM_OUTPUT_ALL));
-        inputFluidSlots = Set.copyOf(partition.getSlots(ModIOTypes.FLUID.get(), SlotZone.FLUID_INPUT_ALL));
-        outputFluidSlots = Set.copyOf(partition.getSlots(ModIOTypes.FLUID.get(), SlotZone.FLUID_OUTPUT_ALL));
+        fluidSlots = Set.copyOf(partition.getSlots(ModIOTypes.FLUID.get(), SlotZone.FLUID_ALL));
     }
 
     private void initFaceAccess() {
@@ -122,11 +119,8 @@ public abstract class AbstractSideProcessor implements SideProcessor {
         if (!outputItemSlots.isEmpty()) {
             faceAccessController.addSlotsToFaceAccess(side, ModIOTypes.ITEM.get(), outputItemSlots);
         }
-        if (!inputFluidSlots.isEmpty()) {
-            faceAccessController.setSlotsForFace(side, ModIOTypes.FLUID.get(), inputFluidSlots);
-        }
-        if (!outputFluidSlots.isEmpty()) {
-            faceAccessController.addSlotsToFaceAccess(side, ModIOTypes.FLUID.get(), outputFluidSlots);
+        if (!fluidSlots.isEmpty()) {
+            faceAccessController.setSlotsForFace(side, ModIOTypes.FLUID.get(), fluidSlots);
         }
         if (energyCapacity != null) {
             faceAccessController.setSlotsForFace(side, ModIOTypes.ENERGY.get(), Set.of(0));
@@ -196,7 +190,7 @@ public abstract class AbstractSideProcessor implements SideProcessor {
             if (type == ModIOTypes.ENERGY.get()) {
                 changed = pushEnergyOutput() || changed;
             } else if (type == ModIOTypes.FLUID.get()) {
-                changed = pushOutput(outputFluidSlots, tanks, type) || changed;
+                changed = pushOutput(fluidSlots, tanks, type) || changed;
             } else {
                 changed = pushOutput(outputItemSlots, items, type) || changed;
             }
@@ -295,10 +289,8 @@ public abstract class AbstractSideProcessor implements SideProcessor {
     public void tick() {
         if (++tickCounter % tickInterval != 0) return;
 
-        boolean hasTickFactory = zhenType.getTickFactory() != null;
-
-        // 懒汉跳过：无配方、无输入变化、无 tickFactory 时跳过全部处理
-        if (!hasWork() && !hasTickFactory) {
+        // 懒汉跳过：无配方、无输入变化、无 tick 逻辑时跳过全部处理
+        if (!hasWork() && !zhenType.hasTickFactory()) {
             return;
         }
 
@@ -327,9 +319,7 @@ public abstract class AbstractSideProcessor implements SideProcessor {
             }
         }
 
-        if (hasTickFactory) {
-            zhenType.getTickFactory().apply(new SmallSiftMethod(level, pos, level.getBlockState(pos), null)).run();
-        }
+        zhenType.execute(level, pos, level.getBlockState(pos), null);
     }
 
     @Override

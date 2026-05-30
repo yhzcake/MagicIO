@@ -10,6 +10,7 @@ import com.yhzcake.magicio.io.ModIOTypes;
 import net.minecraft.core.Holder;
 import net.minecraft.core.HolderSet;
 import net.minecraft.core.NonNullList;
+import net.minecraft.resources.Identifier;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.crafting.Ingredient;
@@ -24,12 +25,12 @@ import net.minecraft.core.HolderLookup;
 import net.minecraft.world.level.Level;
 
 public class ZhenRecipe implements Recipe<ZhenRecipeInput> {
-    private final String type;
+    private final Identifier type;
     private final List<RecipeInput<?>> inputs;
     private final List<RecipeOutput<?>> outputs;
     private final int processingTime;
 
-    public ZhenRecipe(String type, List<RecipeInput<?>> inputs, List<RecipeOutput<?>> outputs, int processingTime) {
+    public ZhenRecipe(Identifier type, List<RecipeInput<?>> inputs, List<RecipeOutput<?>> outputs, int processingTime) {
         this.type = type;
         this.inputs = List.copyOf(inputs);
         this.outputs = List.copyOf(outputs);
@@ -37,6 +38,10 @@ public class ZhenRecipe implements Recipe<ZhenRecipeInput> {
     }
 
     public String getRecipeType() {
+        return type.toString();
+    }
+
+    public Identifier getRecipeTypeId() {
         return type;
     }
 
@@ -171,7 +176,7 @@ public class ZhenRecipe implements Recipe<ZhenRecipeInput> {
     }
 
     public String getTypeStr() {
-        return type;
+        return type.toString();
     }
 
     @SuppressWarnings("unchecked")

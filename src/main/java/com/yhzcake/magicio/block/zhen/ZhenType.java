@@ -9,7 +9,7 @@ import java.util.Set;
 import java.util.function.Function;
 
 import com.yhzcake.magicio.MagicIO;
-import com.yhzcake.magicio.block.entity.method.SmallSiftMethod;
+import com.yhzcake.magicio.block.entity.AbstractZhenBlockEntity;
 import com.yhzcake.magicio.block.inventory.SlotPartition;
 import com.yhzcake.magicio.block.inventory.SlotZone;
 import com.yhzcake.magicio.io.IOType;
@@ -29,17 +29,17 @@ import net.neoforged.neoforge.registries.RegistryBuilder;
 
 import org.jspecify.annotations.Nullable;
 
-import com.yhzcake.magicio.block.entity.AbstractZhenBlockEntity;
-
 public class ZhenType {
     public static final ResourceKey<Registry<ZhenType>> ZHEN_TYPE_REGISTRY_KEY = ResourceKey.createRegistryKey(Identifier.fromNamespaceAndPath(MagicIO.MOD_ID, "zhen_type"));
     public static Registry<ZhenType> ZHEN_TYPES;
+
+    public record ZhenTickContext(Level level, BlockPos pos, BlockState state, @Nullable AbstractZhenBlockEntity blockEntity) {}
 
     private final ElementType elementType;
     private final String type;
     private final SlotPartition partition;
     private final int level;
-    private final Function<SmallSiftMethod, Runnable> tickFactory;
+    private final Function<ZhenTickContext, Runnable> tickFactory;
     private final @Nullable Integer tankCapacity;
     private final @Nullable Integer energyCapacity;
 
@@ -50,7 +50,7 @@ public class ZhenType {
     private final Map<String, Set<String>> portZones;
 
     public ZhenType(ElementType elementType, String type, SlotPartition partition, int level,
-            Function<SmallSiftMethod, Runnable> tickFactory,
+            Function<ZhenTickContext, Runnable> tickFactory,
             @Nullable Integer tankCapacity, @Nullable Integer energyCapacity,
             Map<Direction, Map<IOType, Set<String>>> faceZoneAccess,
             Map<String, Set<String>> portZones) {
@@ -66,13 +66,19 @@ public class ZhenType {
     }
 
     public ZhenType(ElementType elementType, String type, SlotPartition partition, int level,
-            Function<SmallSiftMethod, Runnable> tickFactory,
+            Function<ZhenTickContext, Runnable> tickFactory,
             @Nullable Integer tankCapacity, @Nullable Integer energyCapacity) {
         this(elementType, type, partition, level, tickFactory, tankCapacity, energyCapacity, Map.of(), Map.of());
     }
 
     public ZhenType(ElementType elementType, String type, SlotPartition partition, int level,
-            Function<SmallSiftMethod, Runnable> tickFactory) {
+            Function<ZhenTickContext, Runnable> tickFactory
+        , @Nullable Integer tankCapacity) {
+        this(elementType, type, partition, level, tickFactory, tankCapacity, null, Map.of(), Map.of());
+    }
+
+    public ZhenType(ElementType elementType, String type, SlotPartition partition, int level,
+            Function<ZhenTickContext, Runnable> tickFactory) {
         this(elementType, type, partition, level, tickFactory, null, null);
     }
 
@@ -107,8 +113,6 @@ public class ZhenType {
         return portZones;
     }
 
-    // ===== 原有方法 =====
-
     public ElementType getElementType() {
         return elementType;
     }
@@ -130,23 +134,24 @@ public class ZhenType {
     }
 
     public int getFluidInput() {
-        return partition.getSlots(ModIOTypes.FLUID.get(), SlotZone.FLUID_INPUT_ALL).size();
+        return partition.getSlots(ModIOTypes.FLUID.get(), SlotZone.FLUID_ALL).size();
     }
 
     public int getFluidOutput() {
-        return partition.getSlots(ModIOTypes.FLUID.get(), SlotZone.FLUID_OUTPUT_ALL).size();
+        return partition.getSlots(ModIOTypes.FLUID.get(), SlotZone.FLUID_ALL).size();
     }
 
     public int getLevel() {
         return level;
     }
 
-    public Function<SmallSiftMethod, Runnable> getTickFactory() {
-        return tickFactory;
+    public boolean hasTickFactory() {
+        return tickFactory != null;
     }
 
-    public void execute(Level level, BlockPos pos, BlockState state, AbstractZhenBlockEntity blockEntity) {
-        tickFactory.apply(new SmallSiftMethod(level, pos, state, blockEntity)).run();
+    public void execute(Level level, BlockPos pos, BlockState state, @Nullable AbstractZhenBlockEntity blockEntity) {
+        if (tickFactory != null)
+            tickFactory.apply(new ZhenTickContext(level, pos, state, blockEntity)).run();
     }
 
     @Override
