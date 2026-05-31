@@ -5,6 +5,7 @@ import com.yhzcake.magicio.block.inventory.SlotZone;
 import com.yhzcake.magicio.block.zhen.ZhenType;
 import com.yhzcake.magicio.io.ModIOTypes;
 import com.google.gson.*;
+import com.mojang.serialization.JsonOps;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.item.ItemStack;
@@ -29,12 +30,23 @@ import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 public class ZhenRecipeLoader {
 
-    private static LootTable getLootTable(MinecraftServer server, Identifier lootTableId) {
+    private static final Map<Identifier, LootTable> EXPANDED_CACHE = new ConcurrentHashMap<>();
+
+    public static LootTable getLootTable(MinecraftServer server, Identifier lootTableId) {
         var lootTableKey = ResourceKey.create(Registries.LOOT_TABLE, lootTableId);
         return server.reloadableRegistries().getLootTable(lootTableKey);
+    }
+
+    public static LootTable getCachedExpandedTable(Identifier lootTableId) {
+        return EXPANDED_CACHE.get(lootTableId);
+    }
+
+    public static void clearCache() {
+        EXPANDED_CACHE.clear();
     }
 
     public static boolean validateLootTable(MinecraftServer server, Identifier lootTableId) {
@@ -53,7 +65,6 @@ public class ZhenRecipeLoader {
             if (lootTable == null || lootTable == LootTable.EMPTY) {
                 return List.of();
             }
-
             return lootTable.getRandomItems(
                     new LootParams.Builder(level)
                             .create(LootContextParamSets.EMPTY)
@@ -62,6 +73,127 @@ public class ZhenRecipeLoader {
             MagicIO.LOGGER.warn("Failed to get items from loot table {}: {}", lootTableId, e.getMessage());
             return List.of();
         }
+    }
+
+    private static void expandAndCache(Identifier lootTableId, MinecraftServer server) {
+        if (server == null || EXPANDED_CACHE.containsKey(lootTableId)) return;
+        try {
+            Identifier filePath = Identifier.parse(lootTableId.getNamespace() + ":" + "loot_table/" + lootTableId.getPath() + ".json");
+            var resourceOpt = server.getResourceManager().getResource(filePath);
+            if (resourceOpt.isEmpty()) return;
+
+            Gson gson = new Gson();
+            JsonObject root;
+            try (Reader reader = new InputStreamReader(resourceOpt.get().open())) {
+                root = gson.fromJson(reader, JsonObject.class);
+            }
+            if (root == null) return;
+
+            JsonArray pools = root.getAsJsonArray("pools");
+            if (pools == null) return;
+
+            boolean modified = false;
+            for (int pi = 0; pi < pools.size(); pi++) {
+                JsonObject poolObj = pools.get(pi).getAsJsonObject();
+
+                // 修正 binomial rolls：补上 type 字段
+                if (poolObj.has("rolls")) {
+                    JsonElement rollsElem = poolObj.get("rolls");
+                    if (rollsElem.isJsonObject()) {
+                        JsonObject rollsObj = rollsElem.getAsJsonObject();
+                        if (rollsObj.has("n") && !rollsObj.has("type")) {
+                            rollsObj.addProperty("type", "minecraft:binomial");
+                        }
+                    }
+                }
+
+                JsonArray entries = poolObj.getAsJsonArray("entries");
+                if (entries == null) continue;
+
+                JsonArray newEntries = new JsonArray();
+                for (int ei = 0; ei < entries.size(); ei++) {
+                    JsonObject entryObj = entries.get(ei).getAsJsonObject();
+                    if (!entryObj.has("name")) { newEntries.add(entryObj); continue; }
+                    String name = entryObj.get("name").getAsString();
+                    if (!name.startsWith("#")) { newEntries.add(entryObj); continue; }
+
+                    modified = true;
+                    List<String> itemIds = resolveItemIds(name.substring(1), server, gson);
+                    if (itemIds.isEmpty()) continue;
+
+                    for (String itemId : itemIds) {
+                        JsonObject copy = entryObj.deepCopy();
+                        copy.addProperty("name", itemId);
+                        newEntries.add(copy);
+                    }
+                }
+                if (modified) {
+                    poolObj.add("entries", newEntries);
+                }
+            }
+
+            if (!modified) return;
+
+            var result = LootTable.DIRECT_CODEC.parse(JsonOps.INSTANCE, root);
+            result.result().ifPresent(table -> {
+                EXPANDED_CACHE.put(lootTableId, table);
+                MagicIO.LOGGER.info("Expanded loot table {} with #tag entries", lootTableId);
+            });
+            result.error().ifPresent(err ->
+                MagicIO.LOGGER.warn("Failed to parse expanded loot table {}: {}", lootTableId, err.message())
+            );
+        } catch (Exception e) {
+            MagicIO.LOGGER.warn("Failed to expand loot table {}: {}", lootTableId, e.getMessage());
+        }
+    }
+
+    private static List<String> resolveItemIds(String tagStr, MinecraftServer server, Gson gson) {
+        boolean wildcard = tagStr.endsWith("/*");
+        String baseStr = wildcard ? tagStr.substring(0, tagStr.length() - 2) : tagStr;
+        int ci = baseStr.indexOf(':');
+        String ns = ci >= 0 ? baseStr.substring(0, ci) : "minecraft";
+        String path = ci >= 0 ? baseStr.substring(ci + 1) : baseStr;
+
+        List<String> results = new ArrayList<>();
+        if (wildcard) {
+            server.getResourceManager().listResources("tags/items/" + path,
+                    loc -> loc.getNamespace().equals(ns) && loc.getPath().startsWith("tags/items/" + path + "/")
+            ).forEach((loc, res) -> {
+                try (Reader tr = new InputStreamReader(res.open())) {
+                    JsonObject tagRoot = gson.fromJson(tr, JsonObject.class);
+                    if (tagRoot == null || !tagRoot.has("values")) return;
+                    for (JsonElement valElem : tagRoot.getAsJsonArray("values")) {
+                        String valStr = valElem.getAsString();
+                        if (valStr.startsWith("#")) {
+                            results.addAll(resolveItemIds(valStr, server, gson));
+                        } else {
+                            results.add(valStr);
+                        }
+                    }
+                } catch (Exception e) {
+                    MagicIO.LOGGER.warn("Failed to resolve wildcard tag {}: {}", loc, e.getMessage());
+                }
+            });
+        } else {
+            Identifier tagFilePath = Identifier.parse(ns + ":" + "tags/items/" + path + ".json");
+            var tagResourceOpt = server.getResourceManager().getResource(tagFilePath);
+            if (tagResourceOpt.isEmpty()) return results;
+            try (Reader tagReader = new InputStreamReader(tagResourceOpt.get().open())) {
+                JsonObject tagRoot = gson.fromJson(tagReader, JsonObject.class);
+                if (tagRoot == null || !tagRoot.has("values")) return results;
+                for (JsonElement valElem : tagRoot.getAsJsonArray("values")) {
+                    String valStr = valElem.getAsString();
+                    if (valStr.startsWith("#")) {
+                        results.addAll(resolveItemIds(valStr, server, gson));
+                    } else {
+                        results.add(valStr);
+                    }
+                }
+            } catch (Exception e) {
+                MagicIO.LOGGER.warn("Failed to resolve tag file {}: {}", tagFilePath, e.getMessage());
+            }
+        }
+        return results;
     }
 
     @SuppressWarnings("unchecked")
@@ -114,30 +246,16 @@ public class ZhenRecipeLoader {
 
             if (json.has("outputs")) {
                 JsonElement outputsElement = json.get("outputs");
-                if (outputsElement.isJsonArray()) {
-                    NonNullList<OutputEntry> entries = NonNullList.create();
-                    for (JsonElement element : outputsElement.getAsJsonArray()) {
-                        JsonObject outputObj = element.getAsJsonObject();
-                        if (outputObj.has("loot_table")) {
-                            Identifier lootId = Identifier.parse(outputObj.get("loot_table").getAsString());
-                            entries.add(OutputEntry.lootTable(lootId));
-                        } else {
-                            String item = outputObj.get("item").getAsString();
-                            int count = outputObj.has("count") ? outputObj.get("count").getAsInt() : 1;
-                            Identifier itemId = Identifier.parse(item);
-                            BuiltInRegistries.ITEM.get(itemId).ifPresent(holder -> entries.add(OutputEntry.item(new ItemStack(holder.value(), count))));
-                        }
-                    }
-                    outputs.add(new RecipeOutput<>(ModIOTypes.ITEM.get(), SlotZone.ITEM_OUTPUT_ALL.getName(), entries));
-                } else if (outputsElement.isJsonObject()) {
+                if (outputsElement.isJsonObject()) {
                     for (Map.Entry<String, JsonElement> entry : outputsElement.getAsJsonObject().entrySet()) {
                         NonNullList<OutputEntry> entries = NonNullList.create();
                         for (JsonElement element : entry.getValue().getAsJsonArray()) {
                             JsonObject outputObj = element.getAsJsonObject();
                             if (outputObj.has("loot_table")) {
                                 Identifier lootId = Identifier.parse(outputObj.get("loot_table").getAsString());
+                                expandAndCache(lootId, server);
                                 entries.add(OutputEntry.lootTable(lootId));
-                            } else {
+                            } else if (outputObj.has("item")) {
                                 String item = outputObj.get("item").getAsString();
                                 int count = outputObj.has("count") ? outputObj.get("count").getAsInt() : 1;
                                 Identifier itemId = Identifier.parse(item);

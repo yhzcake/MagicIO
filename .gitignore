@@ -35,3 +35,8 @@ run/
 **/src/generated/**/.cache/
 repo/
 !**/src/**/repo/
+**/resources/data/forge/tags/items/nuggets/*
+**/resources/data/forge/tags/items/rods/*
+**/resources/data/forge/tags/items/plates/*
+**/resources/data/forge/tags/items/pieces/*
+**/resources/data/forge/tags/items/chunks/*

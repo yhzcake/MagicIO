@@ -10,7 +10,7 @@
       {"item":"dirt","count":1}
     ],
     "drop_output":[
-      {"loot_table":"magic_io:zhen_loot"}
+      {"loot_table":"magic_io:sift_metal_drop"}
     ]
   },
   "processing_time": 100

@@ -82,6 +82,10 @@ public class ZhenType {
         this(elementType, type, partition, level, tickFactory, null, null);
     }
 
+    public ZhenType(ElementType elementType, String type, SlotPartition partition, int level) {
+        this(elementType, type, partition, level, null, null, null);
+    }
+
     private static Map<Direction, Map<IOType, Set<Integer>>> buildFaceAccess(
             SlotPartition partition, Map<Direction, Map<IOType, Set<String>>> zoneAccess) {
         if (zoneAccess == null || zoneAccess.isEmpty()) return Map.of();

@@ -1,13 +1,14 @@
 package com.yhzcake.magicio.item.crafting;
 
-import java.util.List;
-
 import org.jspecify.annotations.Nullable;
 
 import net.minecraft.core.NonNullList;
 import net.minecraft.resources.Identifier;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.level.storage.loot.LootParams;
+import net.minecraft.world.level.storage.loot.LootTable;
+import net.minecraft.world.level.storage.loot.parameters.LootContextParamSets;
 
 public record OutputEntry(@Nullable ItemStack stack, @Nullable Identifier lootTableId) {
 
@@ -29,8 +30,13 @@ public record OutputEntry(@Nullable ItemStack stack, @Nullable Identifier lootTa
             result.add(stack.copy());
         }
         if (lootTableId != null) {
-            List<ItemStack> lootItems = ZhenRecipeLoader.getItemsFromLootTable(level.getServer(), level, lootTableId);
-            result.addAll(lootItems);
+            LootTable table = ZhenRecipeLoader.getCachedExpandedTable(lootTableId);
+            if (table == null) {
+                table = ZhenRecipeLoader.getLootTable(level.getServer(), lootTableId);
+            }
+            LootParams params = new LootParams.Builder(level)
+                    .create(LootContextParamSets.EMPTY);
+            result.addAll(table.getRandomItems(params));
         }
         return result;
     }

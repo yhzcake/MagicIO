@@ -215,6 +215,7 @@ public class MagicIO {
     }
 
     private static void loadAllRecipes(ResourceManager resourceManager, @Nullable MinecraftServer server) {
+        ZhenRecipeLoader.clearCache();
         ZhenRecipeManager.getInstance().clearRecipes();
 
         Map<Identifier, Resource> resources = resourceManager.listResources(

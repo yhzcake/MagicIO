@@ -2,6 +2,8 @@ package com.yhzcake.magicio.item.crafting;
 
 import com.yhzcake.magicio.io.ModIOTypes;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 
 import com.mojang.serialization.Codec;
@@ -28,29 +30,29 @@ public class ZhenRecipeSerializer {
             instance -> instance.group(
                     ItemStack.CODEC.optionalFieldOf("item", ItemStack.EMPTY).forGetter(OutputEntry::stack),
                     Identifier.CODEC.optionalFieldOf("loot_table", (Identifier) null).forGetter(OutputEntry::lootTableId)
-            ).apply(instance, (stack, lootTable) ->
-                    lootTable != null ? OutputEntry.lootTable(lootTable) : OutputEntry.item(stack)
-            )
+            ).apply(instance, (stack, lootTable) -> {
+                return lootTable != null ? OutputEntry.lootTable(lootTable) : OutputEntry.item(stack);
+            })
     );
 
     private static final Codec<NonNullList<OutputEntry>> OUTPUT_LIST_CODEC =
             OUTPUT_ENTRY_CODEC.listOf().xmap(
-                    (java.util.List<OutputEntry> list) -> {
+                    (List<OutputEntry> list) -> {
                         NonNullList<OutputEntry> result = NonNullList.create();
                         result.addAll(list);
                         return result;
                     },
-                    list -> (java.util.List<OutputEntry>) list
+                    list -> (List<OutputEntry>) list
             );
 
     private static final Codec<Map<String, NonNullList<Ingredient>>> INPUT_MAP_CODEC =
             Codec.unboundedMap(Codec.STRING, Ingredient.CODEC.listOf().xmap(
-                    (java.util.List<Ingredient> list) -> {
+                    (List<Ingredient> list) -> {
                         NonNullList<Ingredient> result = NonNullList.create();
                         result.addAll(list);
                         return result;
                     },
-                    list -> (java.util.List<Ingredient>) list
+                    list -> (List<Ingredient>) list
             ));
 
     private static final Codec<Map<String, NonNullList<OutputEntry>>> OUTPUT_MAP_CODEC =
@@ -66,22 +68,22 @@ public class ZhenRecipeSerializer {
 
     private static final Codec<Map<String, NonNullList<ZhenRecipe.FluidIngredient>>> FLUID_INPUT_MAP_CODEC =
             Codec.unboundedMap(Codec.STRING, FLUID_INGREDIENT_CODEC.listOf().xmap(
-                    (java.util.List<ZhenRecipe.FluidIngredient> list) -> {
+                    (List<ZhenRecipe.FluidIngredient> list) -> {
                         NonNullList<ZhenRecipe.FluidIngredient> result = NonNullList.create();
                         result.addAll(list);
                         return result;
                     },
-                    list -> (java.util.List<ZhenRecipe.FluidIngredient>) list
+                    list -> (List<ZhenRecipe.FluidIngredient>) list
             ));
 
     private static final Codec<Map<String, NonNullList<FluidStack>>> FLUID_OUTPUT_MAP_CODEC =
             Codec.unboundedMap(Codec.STRING, FluidStack.CODEC.listOf().xmap(
-                    (java.util.List<FluidStack> list) -> {
+                    (List<FluidStack> list) -> {
                         NonNullList<FluidStack> result = NonNullList.create();
                         result.addAll(list);
                         return result;
                     },
-                    list -> (java.util.List<FluidStack>) list
+                    list -> (List<FluidStack>) list
             ));
 
     private static ZhenRecipe buildFromParsed(
@@ -93,8 +95,8 @@ public class ZhenRecipeSerializer {
             Identifier lootTableId,
             int processingTime
     ) {
-        java.util.List<RecipeInput<?>> inputs = new java.util.ArrayList<>();
-        java.util.List<RecipeOutput<?>> outputs = new java.util.ArrayList<>();
+        List<RecipeInput<?>> inputs = new ArrayList<>();
+        List<RecipeOutput<?>> outputs = new ArrayList<>();
 
         for (var entry : itemInputs.entrySet()) {
             inputs.add(new RecipeInput<>(ModIOTypes.ITEM.get(), entry.getKey(), entry.getValue()));
@@ -182,13 +184,13 @@ public class ZhenRecipeSerializer {
 
     public static final StreamCodec<RegistryFriendlyByteBuf, ZhenRecipe> STREAM_CODEC = StreamCodec.of(
             (buf, recipe) -> {
-                java.util.List<RecipeInput<?>> inputs = recipe.getInputs();
-                java.util.List<RecipeOutput<?>> outputs = recipe.getOutputs();
+                List<RecipeInput<?>> inputs = recipe.getInputs();
+                List<RecipeOutput<?>> outputs = recipe.getOutputs();
 
                 Identifier.STREAM_CODEC.encode(buf, recipe.getRecipeTypeId());
 
-                java.util.List<RecipeInput<?>> itemInputs = new java.util.ArrayList<>();
-                java.util.List<RecipeInput<?>> fluidInputsList = new java.util.ArrayList<>();
+                List<RecipeInput<?>> itemInputs = new ArrayList<>();
+                List<RecipeInput<?>> fluidInputsList = new ArrayList<>();
                 for (RecipeInput<?> input : inputs) {
                     if (input.type() == ModIOTypes.ITEM.get()) itemInputs.add(input);
                     else if (input.type() == ModIOTypes.FLUID.get()) fluidInputsList.add(input);
@@ -204,8 +206,8 @@ public class ZhenRecipeSerializer {
                     }
                 }
 
-                java.util.List<RecipeOutput<?>> itemOutputs = new java.util.ArrayList<>();
-                java.util.List<RecipeOutput<?>> fluidOutputsList = new java.util.ArrayList<>();
+                List<RecipeOutput<?>> itemOutputs = new ArrayList<>();
+                List<RecipeOutput<?>> fluidOutputsList = new ArrayList<>();
                 for (RecipeOutput<?> output : outputs) {
                     if (output.type() == ModIOTypes.ITEM.get()) itemOutputs.add(output);
                     else if (output.type() == ModIOTypes.FLUID.get()) fluidOutputsList.add(output);
@@ -217,10 +219,11 @@ public class ZhenRecipeSerializer {
                     NonNullList<OutputEntry> entries = (NonNullList<OutputEntry>) output.specification();
                     buf.writeInt(entries.size());
                     for (OutputEntry entry : entries) {
-                        buf.writeBoolean(entry.isLootTable());
                         if (entry.isLootTable()) {
+                            buf.writeByte(1);
                             Identifier.STREAM_CODEC.encode(buf, entry.lootTableId());
                         } else {
+                            buf.writeByte(0);
                             ItemStack.STREAM_CODEC.encode(buf, entry.stack());
                         }
                     }
@@ -252,7 +255,7 @@ public class ZhenRecipeSerializer {
                 Identifier type = Identifier.STREAM_CODEC.decode(buf);
 
                 int inputZoneCount = buf.readInt();
-                java.util.List<RecipeInput<?>> inputs = new java.util.ArrayList<>();
+                List<RecipeInput<?>> inputs = new ArrayList<>();
                 for (int i = 0; i < inputZoneCount; i++) {
                     String zoneName = buf.readUtf();
                     int ingredientCount = buf.readInt();
@@ -264,17 +267,16 @@ public class ZhenRecipeSerializer {
                 }
 
                 int outputZoneCount = buf.readInt();
-                java.util.List<RecipeOutput<?>> outputs = new java.util.ArrayList<>();
+                List<RecipeOutput<?>> outputs = new ArrayList<>();
                 for (int i = 0; i < outputZoneCount; i++) {
                     String zoneName = buf.readUtf();
                     int entryCount = buf.readInt();
                     NonNullList<OutputEntry> entries = NonNullList.create();
                     for (int j = 0; j < entryCount; j++) {
-                        boolean isLoot = buf.readBoolean();
-                        if (isLoot) {
-                            entries.add(OutputEntry.lootTable(Identifier.STREAM_CODEC.decode(buf)));
-                        } else {
-                            entries.add(OutputEntry.item(ItemStack.STREAM_CODEC.decode(buf)));
+                        byte entryType = buf.readByte();
+                        switch (entryType) {
+                            case 1 -> entries.add(OutputEntry.lootTable(Identifier.STREAM_CODEC.decode(buf)));
+                            default -> entries.add(OutputEntry.item(ItemStack.STREAM_CODEC.decode(buf)));
                         }
                     }
                     outputs.add(new RecipeOutput<>(ModIOTypes.ITEM.get(), zoneName, entries));
