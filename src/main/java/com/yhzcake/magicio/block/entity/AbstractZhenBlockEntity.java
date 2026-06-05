@@ -695,7 +695,6 @@ public abstract class AbstractZhenBlockEntity extends BaseContainerBlockEntity i
     @Override
     protected AbstractContainerMenu createMenu(int containerId, Inventory inventory) {
         // TODO Auto-generated method stub
-        throw new UnsupportedOperationException("Unimplemented method 'createMenu'");
     }
 
 }
