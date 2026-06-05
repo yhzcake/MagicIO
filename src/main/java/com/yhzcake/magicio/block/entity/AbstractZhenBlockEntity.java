@@ -23,6 +23,7 @@ import com.yhzcake.magicio.item.ModDataComponents;
 import com.yhzcake.magicio.item.crafting.RecipeInput;
 import com.yhzcake.magicio.item.crafting.RecipeProcessor;
 import com.yhzcake.magicio.item.crafting.ZhenRecipe;
+import com.yhzcake.magicio.MagicIo;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
@@ -695,6 +696,7 @@ public abstract class AbstractZhenBlockEntity extends BaseContainerBlockEntity i
     @Override
     protected AbstractContainerMenu createMenu(int containerId, Inventory inventory) {
         // TODO Auto-generated method stub
+        MagicIO.LOGGER.debug("todo");
     }
 
 }
