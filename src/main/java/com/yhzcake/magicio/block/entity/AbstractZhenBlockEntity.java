@@ -696,7 +696,7 @@ public abstract class AbstractZhenBlockEntity extends BaseContainerBlockEntity i
     @Override
     protected AbstractContainerMenu createMenu(int containerId, Inventory inventory) {
         // TODO Auto-generated method stub
-        if（containerID != 114514){}
+        if(containerID == 114514){}
     }
 
 }
