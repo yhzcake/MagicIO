@@ -8,12 +8,14 @@ import com.google.gson.*;
 import com.mojang.serialization.JsonOps;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.storage.loot.LootParams;
 import net.minecraft.world.level.storage.loot.LootTable;
 import net.minecraft.world.level.storage.loot.parameters.LootContextParamSets;
 import net.minecraft.core.Holder;
 import net.minecraft.core.HolderSet;
+import net.minecraft.core.HolderLookup;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.resources.Identifier;
@@ -119,6 +121,7 @@ public class ZhenRecipeLoader {
 
                     modified = true;
                     List<String> itemIds = resolveItemIds(name.substring(1), server, gson);
+                    MagicIO.LOGGER.trace("expandAndCache: resolved '{}' -> {} items: {}", name, itemIds.size(), itemIds);
                     if (itemIds.isEmpty()) continue;
 
                     for (String itemId : itemIds) {
@@ -137,7 +140,11 @@ public class ZhenRecipeLoader {
             var result = LootTable.DIRECT_CODEC.parse(JsonOps.INSTANCE, root);
             result.result().ifPresent(table -> {
                 EXPANDED_CACHE.put(lootTableId, table);
-                MagicIO.LOGGER.info("Expanded loot table {} with #tag entries", lootTableId);
+                int entryCount = 0;
+                for (int i = 0; i < pools.size(); i++) {
+                    entryCount += pools.get(i).getAsJsonObject().getAsJsonArray("entries").size();
+                }
+                MagicIO.LOGGER.info("Expanded loot table {} with #tag entries ({} pools, {} total entries)", lootTableId, pools.size(), entryCount);
             });
             result.error().ifPresent(err ->
                 MagicIO.LOGGER.warn("Failed to parse expanded loot table {}: {}", lootTableId, err.message())
@@ -148,51 +155,18 @@ public class ZhenRecipeLoader {
     }
 
     private static List<String> resolveItemIds(String tagStr, MinecraftServer server, Gson gson) {
-        boolean wildcard = tagStr.endsWith("/*");
-        String baseStr = wildcard ? tagStr.substring(0, tagStr.length() - 2) : tagStr;
-        int ci = baseStr.indexOf(':');
-        String ns = ci >= 0 ? baseStr.substring(0, ci) : "minecraft";
-        String path = ci >= 0 ? baseStr.substring(ci + 1) : baseStr;
+        // 直接从服务端的注册表标签系统解析，不依赖手动读 tag JSON 文件
+        HolderLookup.RegistryLookup<Item> itemRegistry = server.reloadableRegistries().lookup().lookupOrThrow(Registries.ITEM);
+        Identifier tagId = Identifier.parse(tagStr);
+        TagKey<Item> tagKey = TagKey.create(Registries.ITEM, tagId);
 
         List<String> results = new ArrayList<>();
-        if (wildcard) {
-            server.getResourceManager().listResources("tags/items/" + path,
-                    loc -> loc.getNamespace().equals(ns) && loc.getPath().startsWith("tags/items/" + path + "/")
-            ).forEach((loc, res) -> {
-                try (Reader tr = new InputStreamReader(res.open())) {
-                    JsonObject tagRoot = gson.fromJson(tr, JsonObject.class);
-                    if (tagRoot == null || !tagRoot.has("values")) return;
-                    for (JsonElement valElem : tagRoot.getAsJsonArray("values")) {
-                        String valStr = valElem.getAsString();
-                        if (valStr.startsWith("#")) {
-                            results.addAll(resolveItemIds(valStr, server, gson));
-                        } else {
-                            results.add(valStr);
-                        }
-                    }
-                } catch (Exception e) {
-                    MagicIO.LOGGER.warn("Failed to resolve wildcard tag {}: {}", loc, e.getMessage());
-                }
-            });
-        } else {
-            Identifier tagFilePath = Identifier.parse(ns + ":" + "tags/items/" + path + ".json");
-            var tagResourceOpt = server.getResourceManager().getResource(tagFilePath);
-            if (tagResourceOpt.isEmpty()) return results;
-            try (Reader tagReader = new InputStreamReader(tagResourceOpt.get().open())) {
-                JsonObject tagRoot = gson.fromJson(tagReader, JsonObject.class);
-                if (tagRoot == null || !tagRoot.has("values")) return results;
-                for (JsonElement valElem : tagRoot.getAsJsonArray("values")) {
-                    String valStr = valElem.getAsString();
-                    if (valStr.startsWith("#")) {
-                        results.addAll(resolveItemIds(valStr, server, gson));
-                    } else {
-                        results.add(valStr);
-                    }
-                }
-            } catch (Exception e) {
-                MagicIO.LOGGER.warn("Failed to resolve tag file {}: {}", tagFilePath, e.getMessage());
+        itemRegistry.get(tagKey).ifPresent(named -> {
+            for (Holder<Item> holder : named) {
+                holder.unwrapKey().ifPresent(key -> results.add(key.identifier().toString()));
             }
-        }
+        });
+        MagicIO.LOGGER.trace("resolveItemIds: registry lookup '{}' -> {} items", tagStr, results.size());
         return results;
     }
 

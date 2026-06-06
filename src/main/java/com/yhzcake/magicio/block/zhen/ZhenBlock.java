@@ -20,7 +20,6 @@ import net.minecraft.world.level.block.entity.BlockEntityTicker;
 import net.minecraft.world.level.block.entity.BlockEntityType;
 import net.minecraft.world.level.block.state.BlockState;
 
-@SuppressWarnings("unused")
 public class ZhenBlock extends BaseEntityBlock {
     public static final MapCodec<ZhenBlock> CODEC = simpleCodec(ZhenBlock::new);
     

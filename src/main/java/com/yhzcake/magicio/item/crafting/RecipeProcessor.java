@@ -9,6 +9,7 @@ import com.yhzcake.magicio.io.FluidIOComponent;
 import com.yhzcake.magicio.io.IOProcessor;
 import com.yhzcake.magicio.io.ModIOTypes;
 import com.yhzcake.magicio.io.WorldDropIOComponent;
+import com.yhzcake.magicio.MagicIO;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
@@ -73,11 +74,13 @@ public class RecipeProcessor {
             if (state.inputsChanged || state.recipeCheckTimer >= RECIPE_RECHECK_INTERVAL) {
                 state.recipeCheckTimer = 0;
                 if (state.inputsChanged && findRecipeFromCache(state, zhenType, items, tanks, partition, level)) {
+                    MagicIO.LOGGER.trace("[{}] processTick: restored recipe {} from cache", pos.toShortString(), state.currentRecipe.getRecipeType());
                     needSync = true;
                 }
                 if (state.currentRecipe == null) {
                     tryFindNewRecipe(state, zhenType, items, tanks, partition, level);
                     if (state.currentRecipe != null) {
+                        MagicIO.LOGGER.trace("[{}] processTick: found new recipe {} ({} ticks)", pos.toShortString(), state.currentRecipe.getRecipeType(), state.currentRecipe.getProcessingTime());
                         needSync = true;
                     }
                 }
@@ -90,6 +93,7 @@ public class RecipeProcessor {
             if (state.inputsChanged) {
                 if (!state.currentRecipe.matches(items, partition, level)
                         || !state.currentRecipe.matchesFluid(tanks, partition)) {
+                    MagicIO.LOGGER.trace("[{}] processTick: recipe {} input no longer matches, aborting", pos.toShortString(), state.currentRecipe.getRecipeType());
                     state.currentRecipe = null;
                     state.processTime = 0;
                     state.inputsChanged = false;
@@ -103,10 +107,13 @@ public class RecipeProcessor {
 
                 // 配方完成
                 if (state.processTime >= state.currentRecipe.getProcessingTime()) {
+                    MagicIO.LOGGER.trace("[{}] processTick: recipe {} complete! attempting to produce output...", pos.toShortString(), state.currentRecipe.getRecipeType());
                     if (tryCompleteRecipe(level, pos, state, partition, items, tanks, ioProcessor, zoneFaceAccess, centerDrop, onChanged)) {
+                        MagicIO.LOGGER.trace("[{}] processTick: recipe {} output produced successfully", pos.toShortString(), state.currentRecipe.getRecipeType());
                         state.processTime = 0;
                         state.currentRecipe = null;
                     } else {
+                        MagicIO.LOGGER.trace("[{}] processTick: recipe {} output FAILED (output full?), backing off by {} ticks", pos.toShortString(), state.currentRecipe.getRecipeType(), PROCESS_COLL_SPEED);
                         state.processTime = Math.max(0, state.processTime - PROCESS_COLL_SPEED);
                         state.inputsChanged = true;
                     }
@@ -169,10 +176,15 @@ public class RecipeProcessor {
             Runnable onChanged
     ) {
         ZhenRecipe recipe = state.currentRecipe;
-        if (!(level instanceof ServerLevel serverLevel)) return false;
+        if (!(level instanceof ServerLevel serverLevel)) {
+            MagicIO.LOGGER.trace("[{}] tryCompleteRecipe: not a ServerLevel, aborting", pos.toShortString());
+            return false;
+        }
 
+        MagicIO.LOGGER.trace("[{}] tryCompleteRecipe: rolling outputs for recipe {}...", pos.toShortString(), recipe.getRecipeType());
         Map<String, NonNullList<ItemStack>> zoneOutputs = recipe.rollOutput(serverLevel);
         Map<String, NonNullList<FluidStack>> fluidOutputs = recipe.rollFluidOutput();
+        MagicIO.LOGGER.trace("[{}] tryCompleteRecipe: zoneOutputs={}, fluidOutputs={}", pos.toShortString(), zoneOutputs, fluidOutputs);
 
         // 获取实际流体罐容量
         int tankCapacity = 0;
@@ -183,11 +195,27 @@ public class RecipeProcessor {
         }
 
         // 预检：所有输入输出是否可满足
-        if (!canProcess(recipe, partition, ioProcessor)) return false;
-        if (!canFitAllZoneItems(zoneOutputs, partition, items, ioProcessor)) return false;
-        if (!canConsumeAllZoneItems(recipe, partition, items)) return false;
-        if (!canFitFluidZoneOutputs(fluidOutputs, partition, tanks, tankCapacity)) return false;
-        if (!canConsumeAllFluids(recipe, partition, tanks)) return false;
+        if (!canProcess(recipe, partition, ioProcessor)) {
+            MagicIO.LOGGER.trace("[{}] tryCompleteRecipe: FAILED canProcess (missing IO or Zone)", pos.toShortString());
+            return false;
+        }
+        if (!canFitAllZoneItems(zoneOutputs, partition, items, ioProcessor)) {
+            MagicIO.LOGGER.trace("[{}] tryCompleteRecipe: FAILED canFitAllZoneItems (output full?)", pos.toShortString());
+            return false;
+        }
+        if (!canConsumeAllZoneItems(recipe, partition, items)) {
+            MagicIO.LOGGER.trace("[{}] tryCompleteRecipe: FAILED canConsumeAllZoneItems (input missing?)", pos.toShortString());
+            return false;
+        }
+        if (!canFitFluidZoneOutputs(fluidOutputs, partition, tanks, tankCapacity)) {
+            MagicIO.LOGGER.trace("[{}] tryCompleteRecipe: FAILED canFitFluidZoneOutputs", pos.toShortString());
+            return false;
+        }
+        if (!canConsumeAllFluids(recipe, partition, tanks)) {
+            MagicIO.LOGGER.trace("[{}] tryCompleteRecipe: FAILED canConsumeAllFluids", pos.toShortString());
+            return false;
+        }
+        MagicIO.LOGGER.trace("[{}] tryCompleteRecipe: all checks passed, executing...", pos.toShortString());
 
         // 执行消耗
         for (RecipeInput<?> input : recipe.getInputs()) {
@@ -474,7 +502,14 @@ public class RecipeProcessor {
             boolean centerDrop
     ) {
         NonNullList<ItemStack> dropItems = zoneOutputs.get(SlotZone.DROP_OUTPUT.getName());
-        if (dropItems == null || dropItems.isEmpty()) return;
+        if (dropItems == null) {
+            MagicIO.LOGGER.trace("[{}] handleDropOutput: DROP_OUTPUT zone not found in zoneOutputs, no items to drop", pos.toShortString());
+            return;
+        }
+        if (dropItems.isEmpty()) {
+            MagicIO.LOGGER.trace("[{}] handleDropOutput: DROP_OUTPUT items list is empty", pos.toShortString());
+            return;
+        }
 
         Direction dropDir = Direction.UP;
         for (Direction dir : Direction.values()) {
@@ -483,6 +518,7 @@ public class RecipeProcessor {
                 break;
             }
         }
+        MagicIO.LOGGER.trace("[{}] handleDropOutput: dropping {} items towards {}: {}", pos.toShortString(), dropItems.size(), dropDir, dropItems);
 
         if (centerDrop) {
             boolean canDrop = level.getBlockState(pos.relative(dropDir)).isAir();
