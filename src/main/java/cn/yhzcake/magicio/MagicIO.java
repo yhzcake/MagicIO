@@ -16,10 +16,12 @@ import cn.yhzcake.magicio.block.zhen.ZhenType;
 import cn.yhzcake.magicio.block.zhen.ZhenTypes;
 import cn.yhzcake.magicio.block.zhenbus.ModZhenBusBlocks;
 import cn.yhzcake.magicio.config.Config;
+import cn.yhzcake.magicio.io.AbstractSideProcessor;
 import cn.yhzcake.magicio.io.EnergyIOComponent;
 import cn.yhzcake.magicio.io.FluidIOComponent;
 import cn.yhzcake.magicio.io.IOType;
 import cn.yhzcake.magicio.io.ItemIOComponent;
+import cn.yhzcake.magicio.io.LinkedItemHandler;
 import cn.yhzcake.magicio.io.ModIOTypes;
 import cn.yhzcake.magicio.io.SideProcessor;
 import cn.yhzcake.magicio.item.ModDataComponents;
@@ -51,6 +53,8 @@ import net.minecraft.world.level.material.MapColor;
 import net.neoforged.bus.api.IEventBus;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.common.Mod;
+import net.neoforged.fml.loading.FMLEnvironment;
+import net.neoforged.api.distmarker.Dist;
 import net.neoforged.fml.config.ModConfig;
 import net.neoforged.fml.event.lifecycle.FMLCommonSetupEvent;
 import net.neoforged.neoforge.common.NeoForge;
@@ -143,11 +147,31 @@ public class MagicIO {
                 }
         );
 
-        // ZhenBus 按面分发
-        registerZhenBusCap(event, Capabilities.Item.BLOCK, ModIOTypes.ITEM.get(), (comp) -> {
-            if (!(comp instanceof ItemIOComponent itemIO)) return null;
-            return new net.neoforged.neoforge.transfer.item.ItemStacksResourceHandler(itemIO.getItems());
-        });
+        // ZhenBus ITEM（内联注册以接入变更通知链）
+        event.registerBlockEntity(
+                Capabilities.Item.BLOCK,
+                ModZhenBusBlocks.ZHEN_BUS_BE.get(),
+                (be, direction) -> {
+                    if (direction == null) return null;
+                    SideProcessor processor = be.getProcessor(direction);
+                    if (processor == null) return null;
+                    Map<IOType, Set<Integer>> access = processor.getFaceAccess(direction);
+                    if (access == null) return null;
+                    Set<Integer> slots = access.get(ModIOTypes.ITEM.get());
+                    if (slots == null || slots.isEmpty()) return null;
+                    Object raw = processor.getIOProcessor().get(ModIOTypes.ITEM.get());
+                    if (!(raw instanceof ItemIOComponent itemIO)) return null;
+                    // 管道只能向输入槽插入、从输出槽提取
+                    AbstractSideProcessor asp = (AbstractSideProcessor) processor;
+                    LinkedItemHandler handler = new LinkedItemHandler(itemIO.getItems(),
+                            asp.getInputItemSlots(), asp.getOutputItemSlots());
+                    handler.setOnChange(() -> {
+                        itemIO.notifyChanged();
+                        be.setChanged();
+                    });
+                    return handler;
+                }
+        );
         registerZhenBusCap(event, Capabilities.Fluid.BLOCK, ModIOTypes.FLUID.get(), (comp) -> {
             if (!(comp instanceof FluidIOComponent fluidComp)) return null;
             return new FluidStacksResourceHandler(fluidComp.getTanks(),
@@ -210,12 +234,16 @@ public class MagicIO {
 
         @Override
         protected void apply(Void data, ResourceManager resourceManager, ProfilerFiller profiler) {
+            // 客户端reload时（F3+T）注册表尚未就绪，跳过加载，服务端onServerStarting会加载
+            if (FMLEnvironment.getDist() == Dist.CLIENT) {
+                LOGGER.info("跳过客户端配方加载，等待服务端启动时加载");
+                return;
+            }
             loadAllRecipes(resourceManager, null);
         }
     }
 
     private static void loadAllRecipes(ResourceManager resourceManager, @Nullable MinecraftServer server) {
-        ZhenRecipeLoader.clearCache();
         ZhenRecipeManager.getInstance().clearRecipes();
 
         Map<Identifier, Resource> resources = resourceManager.listResources(
@@ -233,7 +261,7 @@ public class MagicIO {
                 ZhenRecipe recipe = ZhenRecipeLoader.loadRecipeFromJson(inputStream, server);
                 if (recipe != null) {
                     ZhenRecipeManager.getInstance().addRecipe(recipe);
-                    LOGGER.info("成功加载配方: {}", recipe.getRecipeType());
+                    LOGGER.info("成功加载配方: {}", recipe.getZhenTypeStr());
                 } else {
                     LOGGER.warn("无法加载配方: {}", resourceLocation);
                 }

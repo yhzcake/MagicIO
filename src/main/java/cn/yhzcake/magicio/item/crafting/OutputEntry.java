@@ -32,13 +32,7 @@ public record OutputEntry(@Nullable ItemStack stack, @Nullable Identifier lootTa
         }
         if (lootTableId != null) {
             MagicIO.LOGGER.trace("OutputEntry.roll: looking up loot table {}", lootTableId);
-            LootTable table = ZhenRecipeLoader.getCachedExpandedTable(lootTableId);
-            if (table == null) {
-                MagicIO.LOGGER.trace("OutputEntry.roll: cached expanded table NOT FOUND for {}, falling back to vanilla", lootTableId);
-                table = ZhenRecipeLoader.getLootTable(level.getServer(), lootTableId);
-            } else {
-                MagicIO.LOGGER.trace("OutputEntry.roll: using cached expanded table for {}", lootTableId);
-            }
+            LootTable table = ZhenRecipeLoader.getLootTable(level.getServer(), lootTableId);
             if (table == null || table == LootTable.EMPTY) {
                 MagicIO.LOGGER.warn("OutputEntry.roll: loot table {} is null or EMPTY, no items will be dropped!", lootTableId);
                 return result;

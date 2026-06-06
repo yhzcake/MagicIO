@@ -38,8 +38,10 @@ public class ItemIOComponent implements IOComponent<Ingredient, ItemStack> {
         this.onChange = onChanged;
     }
 
-    private void notifyChanged() {
-        onChange.run();
+    public void notifyChanged() {
+        if (onChange != null) {
+            onChange.run();
+        }
     }
 
     // ===== 查询 =====

@@ -24,24 +24,24 @@ import net.minecraft.core.HolderLookup;
 import net.minecraft.world.level.Level;
 
 public class ZhenRecipe implements Recipe<ZhenRecipeInput> {
-    private final Identifier type;
+    private final Identifier zhenTypeId;
     private final List<RecipeInput<?>> inputs;
     private final List<RecipeOutput<?>> outputs;
     private final int processingTime;
 
-    public ZhenRecipe(Identifier type, List<RecipeInput<?>> inputs, List<RecipeOutput<?>> outputs, int processingTime) {
-        this.type = type;
+    public ZhenRecipe(Identifier zhenTypeId, List<RecipeInput<?>> inputs, List<RecipeOutput<?>> outputs, int processingTime) {
+        this.zhenTypeId = zhenTypeId;
         this.inputs = List.copyOf(inputs);
         this.outputs = List.copyOf(outputs);
         this.processingTime = processingTime;
     }
 
-    public String getRecipeType() {
-        return type.toString();
+    public String getZhenTypeStr() {
+        return zhenTypeId.toString();
     }
 
-    public Identifier getRecipeTypeId() {
-        return type;
+    public Identifier getZhenTypeId() {
+        return zhenTypeId;
     }
 
     public List<RecipeInput<?>> getInputs() {
@@ -172,10 +172,6 @@ public class ZhenRecipe implements Recipe<ZhenRecipeInput> {
 
     public RecipeType<? extends Recipe<ZhenRecipeInput>> getType() {
         return ModRecipeManager.ZHEN_RECIPE.get();
-    }
-
-    public String getTypeStr() {
-        return type.toString();
     }
 
     @SuppressWarnings("unchecked")

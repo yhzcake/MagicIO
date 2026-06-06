@@ -18,7 +18,7 @@ public class ModZhenBusBlocks {
 
     public static final DeferredBlock<Block> ZHEN_BUS =
             BLOCKS.registerBlock("zhen_bus",
-                    p -> new ZhenBusBlock(p.noOcclusion().noCollision()));
+                    p -> new ZhenBusBlock(p.noOcclusion()));
 
     @SuppressWarnings({"unchecked", "rawtypes"})
     public static final DeferredHolder<BlockEntityType<?>, BlockEntityType<ZhenBusBlockEntity>> ZHEN_BUS_BE =

@@ -61,6 +61,14 @@ public abstract class AbstractSideProcessor implements SideProcessor {
     private Set<Integer> inputItemSlots = Set.of();
     private Set<Integer> fluidSlots = Set.of();
 
+    public Set<Integer> getInputItemSlots() {
+        return inputItemSlots;
+    }
+
+    public Set<Integer> getOutputItemSlots() {
+        return outputItemSlots;
+    }
+
     public AbstractSideProcessor(Direction side, ZhenType zhenType, BlockPos pos, Level level) {
         this.side = side;
         this.zhenType = zhenType;
@@ -311,7 +319,14 @@ public abstract class AbstractSideProcessor implements SideProcessor {
             this.inputsChanged = recipeState.inputsChanged;
             this.currentRecipe = recipeState.currentRecipe;
 
-            pushOutputsThroughPorts();
+            // 仅在直连其他 ZhenBus 时才推送输出（避免在无邻接方块时误操作）
+            boolean hasAnyConnected = false;
+            for (var port : virtualPorts.values()) {
+                if (port.hasDirectConnection()) { hasAnyConnected = true; break; }
+            }
+            if (hasAnyConnected) {
+                pushOutputsThroughPorts();
+            }
 
             if (needSync) {
                 level.sendBlockUpdated(pos, level.getBlockState(pos), level.getBlockState(pos), 3);
@@ -381,6 +396,16 @@ public abstract class AbstractSideProcessor implements SideProcessor {
     }
 
     @Override
+    public boolean isInputsChanged() {
+        return inputsChanged;
+    }
+
+    @Override
+    public void setInputsChanged(boolean changed) {
+        this.inputsChanged = changed;
+    }
+
+    @Override
     public void writeToNBT(ValueOutput output) {
         output.putString("side", side.getName());
         output.putInt("process_time", processTime);
@@ -395,7 +420,7 @@ public abstract class AbstractSideProcessor implements SideProcessor {
             component.saveNBT(output);
         }
         if (currentRecipe != null) {
-            output.putString("current_recipe", currentRecipe.getRecipeType());
+            output.putString("current_recipe", currentRecipe.getZhenTypeStr());
         }
     }
 

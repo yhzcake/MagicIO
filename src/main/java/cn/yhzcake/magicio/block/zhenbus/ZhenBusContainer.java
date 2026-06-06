@@ -117,12 +117,15 @@ public class ZhenBusContainer {
             String prefix = dir.getName();
             output.putString(prefix + "_type", processor.getZhenType().getType());
             output.putInt(prefix + "_process_time", processor.getProcessTime());
+            output.putBoolean(prefix + "_inputs_changed", processor.isInputsChanged());
 
             NonNullList<ItemStack> procItems = processor.getItemsForSerialization();
             if (procItems != null) {
                 List<ItemStack> nonEmpty = new ArrayList<>();
                 for (ItemStack stack : procItems) {
-                    nonEmpty.add(stack.copy());
+                    if (!stack.isEmpty()) {          // 过滤空物品，避免 ItemStack.CODEC 严格验证失败
+                        nonEmpty.add(stack.copy());
+                    }
                 }
                 output.store(prefix + "_items", ITEMS_CODEC, nonEmpty);
             }
@@ -131,7 +134,9 @@ public class ZhenBusContainer {
             if (procFluids != null) {
                 List<FluidStack> nonEmpty = new ArrayList<>();
                 for (FluidStack fs : procFluids) {
-                    nonEmpty.add(fs.copy());
+                    if (!fs.isEmpty()) {              // 过滤空流体
+                        nonEmpty.add(fs.copy());
+                    }
                 }
                 output.store(prefix + "_fluids", FLUIDS_CODEC, nonEmpty);
             }
@@ -149,20 +154,30 @@ public class ZhenBusContainer {
 
             AbstractSideProcessor processor = new AbstractSideProcessor(dir, type, pos, level) {};
             processor.setProcessTime(input.getIntOr(prefix + "_process_time", 0));
+            // 从 NBT 加载后强制配方重检（防止重开游戏后 inputsChanged=false 导致配方不启动）
+            processor.setInputsChanged(input.getBooleanOr(prefix + "_inputs_changed", true));
 
             NonNullList<ItemStack> procItems = processor.getItemsForSerialization();
             if (procItems != null) {
                 List<ItemStack> loaded = input.read(prefix + "_items", ITEMS_CODEC).orElse(List.of());
-                for (int i = 0; i < loaded.size() && i < procItems.size(); i++) {
-                    procItems.set(i, loaded.get(i).copy());
+                for (int i = 0; i < procItems.size(); i++) {
+                    if (i < loaded.size()) {
+                        procItems.set(i, loaded.get(i).copy());
+                    } else {
+                        procItems.set(i, ItemStack.EMPTY);  // 缺失的槽位补空
+                    }
                 }
             }
 
             NonNullList<FluidStack> procFluids = processor.getFluidsForSerialization();
             if (procFluids != null) {
                 List<FluidStack> loaded = input.read(prefix + "_fluids", FLUIDS_CODEC).orElse(List.of());
-                for (int i = 0; i < loaded.size() && i < procFluids.size(); i++) {
-                    procFluids.set(i, loaded.get(i).copy());
+                for (int i = 0; i < procFluids.size(); i++) {
+                    if (i < loaded.size()) {
+                        procFluids.set(i, loaded.get(i).copy());
+                    } else {
+                        procFluids.set(i, FluidStack.EMPTY);  // 缺失的槽位补空
+                    }
                 }
             }
 

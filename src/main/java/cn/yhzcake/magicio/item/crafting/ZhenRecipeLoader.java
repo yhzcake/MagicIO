@@ -1,7 +1,6 @@
 package cn.yhzcake.magicio.item.crafting;
 
 import com.google.gson.*;
-import com.mojang.serialization.JsonOps;
 
 import cn.yhzcake.magicio.MagicIO;
 import cn.yhzcake.magicio.block.inventory.SlotZone;
@@ -9,14 +8,12 @@ import cn.yhzcake.magicio.block.zhen.ZhenType;
 import cn.yhzcake.magicio.io.ModIOTypes;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
-import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.storage.loot.LootParams;
 import net.minecraft.world.level.storage.loot.LootTable;
 import net.minecraft.world.level.storage.loot.parameters.LootContextParamSets;
 import net.minecraft.core.Holder;
 import net.minecraft.core.HolderSet;
-import net.minecraft.core.HolderLookup;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.resources.Identifier;
@@ -33,23 +30,12 @@ import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
 
 public class ZhenRecipeLoader {
-
-    private static final Map<Identifier, LootTable> EXPANDED_CACHE = new ConcurrentHashMap<>();
 
     public static LootTable getLootTable(MinecraftServer server, Identifier lootTableId) {
         var lootTableKey = ResourceKey.create(Registries.LOOT_TABLE, lootTableId);
         return server.reloadableRegistries().getLootTable(lootTableKey);
-    }
-
-    public static LootTable getCachedExpandedTable(Identifier lootTableId) {
-        return EXPANDED_CACHE.get(lootTableId);
-    }
-
-    public static void clearCache() {
-        EXPANDED_CACHE.clear();
     }
 
     public static boolean validateLootTable(MinecraftServer server, Identifier lootTableId) {
@@ -78,106 +64,13 @@ public class ZhenRecipeLoader {
         }
     }
 
-    private static void expandAndCache(Identifier lootTableId, MinecraftServer server) {
-        if (server == null || EXPANDED_CACHE.containsKey(lootTableId)) return;
-        try {
-            Identifier filePath = Identifier.parse(lootTableId.getNamespace() + ":" + "loot_table/" + lootTableId.getPath() + ".json");
-            var resourceOpt = server.getResourceManager().getResource(filePath);
-            if (resourceOpt.isEmpty()) return;
-
-            Gson gson = new Gson();
-            JsonObject root;
-            try (Reader reader = new InputStreamReader(resourceOpt.get().open())) {
-                root = gson.fromJson(reader, JsonObject.class);
-            }
-            if (root == null) return;
-
-            JsonArray pools = root.getAsJsonArray("pools");
-            if (pools == null) return;
-
-            boolean modified = false;
-            for (int pi = 0; pi < pools.size(); pi++) {
-                JsonObject poolObj = pools.get(pi).getAsJsonObject();
-
-                // 修正 binomial rolls：补上 type 字段
-                if (poolObj.has("rolls")) {
-                    JsonElement rollsElem = poolObj.get("rolls");
-                    if (rollsElem.isJsonObject()) {
-                        JsonObject rollsObj = rollsElem.getAsJsonObject();
-                        if (rollsObj.has("n") && !rollsObj.has("type")) {
-                            rollsObj.addProperty("type", "minecraft:binomial");
-                        }
-                    }
-                }
-
-                JsonArray entries = poolObj.getAsJsonArray("entries");
-                if (entries == null) continue;
-
-                JsonArray newEntries = new JsonArray();
-                for (int ei = 0; ei < entries.size(); ei++) {
-                    JsonObject entryObj = entries.get(ei).getAsJsonObject();
-                    if (!entryObj.has("name")) { newEntries.add(entryObj); continue; }
-                    String name = entryObj.get("name").getAsString();
-                    if (!name.startsWith("#")) { newEntries.add(entryObj); continue; }
-
-                    modified = true;
-                    List<String> itemIds = resolveItemIds(name.substring(1), server, gson);
-                    MagicIO.LOGGER.trace("expandAndCache: resolved '{}' -> {} items: {}", name, itemIds.size(), itemIds);
-                    if (itemIds.isEmpty()) continue;
-
-                    for (String itemId : itemIds) {
-                        JsonObject copy = entryObj.deepCopy();
-                        copy.addProperty("name", itemId);
-                        newEntries.add(copy);
-                    }
-                }
-                if (modified) {
-                    poolObj.add("entries", newEntries);
-                }
-            }
-
-            if (!modified) return;
-
-            var result = LootTable.DIRECT_CODEC.parse(JsonOps.INSTANCE, root);
-            result.result().ifPresent(table -> {
-                EXPANDED_CACHE.put(lootTableId, table);
-                int entryCount = 0;
-                for (int i = 0; i < pools.size(); i++) {
-                    entryCount += pools.get(i).getAsJsonObject().getAsJsonArray("entries").size();
-                }
-                MagicIO.LOGGER.info("Expanded loot table {} with #tag entries ({} pools, {} total entries)", lootTableId, pools.size(), entryCount);
-            });
-            result.error().ifPresent(err ->
-                MagicIO.LOGGER.warn("Failed to parse expanded loot table {}: {}", lootTableId, err.message())
-            );
-        } catch (Exception e) {
-            MagicIO.LOGGER.warn("Failed to expand loot table {}: {}", lootTableId, e.getMessage());
-        }
-    }
-
-    private static List<String> resolveItemIds(String tagStr, MinecraftServer server, Gson gson) {
-        // 直接从服务端的注册表标签系统解析，不依赖手动读 tag JSON 文件
-        HolderLookup.RegistryLookup<Item> itemRegistry = server.reloadableRegistries().lookup().lookupOrThrow(Registries.ITEM);
-        Identifier tagId = Identifier.parse(tagStr);
-        TagKey<Item> tagKey = TagKey.create(Registries.ITEM, tagId);
-
-        List<String> results = new ArrayList<>();
-        itemRegistry.get(tagKey).ifPresent(named -> {
-            for (Holder<Item> holder : named) {
-                holder.unwrapKey().ifPresent(key -> results.add(key.identifier().toString()));
-            }
-        });
-        MagicIO.LOGGER.trace("resolveItemIds: registry lookup '{}' -> {} items", tagStr, results.size());
-        return results;
-    }
-
     @SuppressWarnings("unchecked")
     public static ZhenRecipe loadRecipeFromJson(InputStream inputStream, MinecraftServer server) {
         try (Reader reader = new InputStreamReader(inputStream)) {
             Gson gson = new Gson();
             JsonObject json = gson.fromJson(reader, JsonObject.class);
 
-            Identifier typeId = Identifier.parse(json.get("type").getAsString());
+            Identifier typeId = Identifier.parse(json.get("zhen_type").getAsString());
             if (ZhenType.ZHEN_TYPES != null) {
                 ZhenType.ZHEN_TYPES.get(typeId).orElseThrow(() -> new IllegalArgumentException("Unknown ZhenType: " + typeId));
             }
@@ -228,7 +121,6 @@ public class ZhenRecipeLoader {
                             JsonObject outputObj = element.getAsJsonObject();
                             if (outputObj.has("loot_table")) {
                                 Identifier lootId = Identifier.parse(outputObj.get("loot_table").getAsString());
-                                expandAndCache(lootId, server);
                                 entries.add(OutputEntry.lootTable(lootId));
                             } else if (outputObj.has("item")) {
                                 String item = outputObj.get("item").getAsString();

@@ -27,7 +27,7 @@ public class ZhenRecipeManager {
     }
 
     public void addRecipe(ZhenRecipe recipe) {
-        recipesByType.computeIfAbsent(recipe.getTypeStr(), k -> new ArrayList<>()).add(recipe);
+        recipesByType.computeIfAbsent(recipe.getZhenTypeStr(), k -> new ArrayList<>()).add(recipe);
     }
 
     public int getRecipeCount() {

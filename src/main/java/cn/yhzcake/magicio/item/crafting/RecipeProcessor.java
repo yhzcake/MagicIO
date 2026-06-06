@@ -73,13 +73,13 @@ public class RecipeProcessor {
             if (state.inputsChanged || state.recipeCheckTimer >= RECIPE_RECHECK_INTERVAL) {
                 state.recipeCheckTimer = 0;
                 if (state.inputsChanged && findRecipeFromCache(state, zhenType, items, tanks, partition, level)) {
-                    MagicIO.LOGGER.trace("[{}] processTick: restored recipe {} from cache", pos.toShortString(), state.currentRecipe.getRecipeType());
+                    MagicIO.LOGGER.trace("[{}] processTick: restored recipe {} from cache", pos.toShortString(), state.currentRecipe.getZhenTypeStr());
                     needSync = true;
                 }
                 if (state.currentRecipe == null) {
                     tryFindNewRecipe(state, zhenType, items, tanks, partition, level);
                     if (state.currentRecipe != null) {
-                        MagicIO.LOGGER.trace("[{}] processTick: found new recipe {} ({} ticks)", pos.toShortString(), state.currentRecipe.getRecipeType(), state.currentRecipe.getProcessingTime());
+                        MagicIO.LOGGER.trace("[{}] processTick: found new recipe {} ({} ticks)", pos.toShortString(), state.currentRecipe.getZhenTypeStr(), state.currentRecipe.getProcessingTime());
                         needSync = true;
                     }
                 }
@@ -92,7 +92,7 @@ public class RecipeProcessor {
             if (state.inputsChanged) {
                 if (!state.currentRecipe.matches(items, partition, level)
                         || !state.currentRecipe.matchesFluid(tanks, partition)) {
-                    MagicIO.LOGGER.trace("[{}] processTick: recipe {} input no longer matches, aborting", pos.toShortString(), state.currentRecipe.getRecipeType());
+                    MagicIO.LOGGER.trace("[{}] processTick: recipe {} input no longer matches, aborting", pos.toShortString(), state.currentRecipe.getZhenTypeStr());
                     state.currentRecipe = null;
                     state.processTime = 0;
                     state.inputsChanged = false;
@@ -106,13 +106,13 @@ public class RecipeProcessor {
 
                 // 配方完成
                 if (state.processTime >= state.currentRecipe.getProcessingTime()) {
-                    MagicIO.LOGGER.trace("[{}] processTick: recipe {} complete! attempting to produce output...", pos.toShortString(), state.currentRecipe.getRecipeType());
+                    MagicIO.LOGGER.trace("[{}] processTick: recipe {} complete! attempting to produce output...", pos.toShortString(), state.currentRecipe.getZhenTypeStr());
                     if (tryCompleteRecipe(level, pos, state, partition, items, tanks, ioProcessor, zoneFaceAccess, centerDrop, onChanged)) {
-                        MagicIO.LOGGER.trace("[{}] processTick: recipe {} output produced successfully", pos.toShortString(), state.currentRecipe.getRecipeType());
+                        MagicIO.LOGGER.trace("[{}] processTick: recipe {} output produced successfully", pos.toShortString(), state.currentRecipe.getZhenTypeStr());
                         state.processTime = 0;
                         state.currentRecipe = null;
                     } else {
-                        MagicIO.LOGGER.trace("[{}] processTick: recipe {} output FAILED (output full?), backing off by {} ticks", pos.toShortString(), state.currentRecipe.getRecipeType(), PROCESS_COLL_SPEED);
+                        MagicIO.LOGGER.trace("[{}] processTick: recipe {} output FAILED (output full?), backing off by {} ticks", pos.toShortString(), state.currentRecipe.getZhenTypeStr(), PROCESS_COLL_SPEED);
                         state.processTime = Math.max(0, state.processTime - PROCESS_COLL_SPEED);
                         state.inputsChanged = true;
                     }
@@ -180,7 +180,7 @@ public class RecipeProcessor {
             return false;
         }
 
-        MagicIO.LOGGER.trace("[{}] tryCompleteRecipe: rolling outputs for recipe {}...", pos.toShortString(), recipe.getRecipeType());
+        MagicIO.LOGGER.trace("[{}] tryCompleteRecipe: rolling outputs for recipe {}...", pos.toShortString(), recipe.getZhenTypeStr());
         Map<String, NonNullList<ItemStack>> zoneOutputs = recipe.rollOutput(serverLevel);
         Map<String, NonNullList<FluidStack>> fluidOutputs = recipe.rollFluidOutput();
         MagicIO.LOGGER.trace("[{}] tryCompleteRecipe: zoneOutputs={}, fluidOutputs={}", pos.toShortString(), zoneOutputs, fluidOutputs);

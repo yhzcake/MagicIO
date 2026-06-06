@@ -1,5 +1,6 @@
 {
-  "type": "magic_io:small_sift_zhen",
+  "type": "magic_io:zhen_block",
+  "zhen_type": "magic_io:small_sift_zhen",
   "inputs": {
     "item_input_all":[
       {"item":"coarse_dirt","count":1}

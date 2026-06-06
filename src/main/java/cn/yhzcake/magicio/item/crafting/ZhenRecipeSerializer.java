@@ -129,7 +129,7 @@ public class ZhenRecipeSerializer {
 
     public static final MapCodec<ZhenRecipe> CODEC = RecordCodecBuilder.mapCodec(
             instance -> instance.group(
-                    Identifier.CODEC.fieldOf("type").forGetter(ZhenRecipe::getRecipeTypeId),
+                    Identifier.CODEC.fieldOf("zhen_type").forGetter(ZhenRecipe::getZhenTypeId),
                     INPUT_MAP_CODEC.fieldOf("inputs").forGetter(
                             r -> {
                                 Map<String, NonNullList<Ingredient>> map = new java.util.LinkedHashMap<>();
@@ -186,7 +186,7 @@ public class ZhenRecipeSerializer {
                 List<RecipeInput<?>> inputs = recipe.getInputs();
                 List<RecipeOutput<?>> outputs = recipe.getOutputs();
 
-                Identifier.STREAM_CODEC.encode(buf, recipe.getRecipeTypeId());
+                Identifier.STREAM_CODEC.encode(buf, recipe.getZhenTypeId());
 
                 List<RecipeInput<?>> itemInputs = new ArrayList<>();
                 List<RecipeInput<?>> fluidInputsList = new ArrayList<>();

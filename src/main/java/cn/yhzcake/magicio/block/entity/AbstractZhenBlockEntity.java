@@ -657,7 +657,7 @@ public abstract class AbstractZhenBlockEntity extends BaseContainerBlockEntity i
         CompoundTag tag = super.getUpdateTag(registries);
         tag.putInt("process_time", state.processTime);
         if (state.currentRecipe != null) {
-            tag.putString("current_recipe", state.currentRecipe.getRecipeType());
+            tag.putString("current_recipe", state.currentRecipe.getZhenTypeStr());
         }
         return tag;
     }

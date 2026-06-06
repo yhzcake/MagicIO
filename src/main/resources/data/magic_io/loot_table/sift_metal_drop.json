@@ -4,22 +4,31 @@
     {
       "rolls": 2,
       "entries": [
-        {"type": "minecraft:item", "name": "#c:nuggets", "weight": 10},
-        {"type": "minecraft:item", "name": "#c:plates",  "weight": 3}
+        {"type": "minecraft:tag", "name": "c:nuggets", "weight": 18, "expand": true},
+        {"type": "minecraft:tag", "name": "c:plates",  "weight": 1, "expand": true},
+        {"type": "minecraft:tag", "name": "c:shards",  "weight": 4, "expand": true},
+        {"type": "minecraft:tag", "name": "c:crystal",  "weight": 5, "expand": true},
+        {"type": "minecraft:tag", "name": "c:clumps",  "weight": 3, "expand": true}
       ]
     },
     {
       "rolls": {"type": "minecraft:binomial", "n": 1, "p": 0.5},
       "entries": [
-        {"type": "minecraft:item", "name": "#c:nuggets", "weight": 10},
-        {"type": "minecraft:item", "name": "#c:plates",  "weight": 3}
+        {"type": "minecraft:tag", "name": "c:nuggets", "weight": 18, "expand": true},
+        {"type": "minecraft:tag", "name": "c:plates",  "weight": 1, "expand": true},
+        {"type": "minecraft:tag", "name": "c:shards",  "weight": 4, "expand": true},
+        {"type": "minecraft:tag", "name": "c:crystal",  "weight": 5, "expand": true},
+        {"type": "minecraft:tag", "name": "c:clumps",  "weight": 3, "expand": true}
       ]
     },
     {
       "rolls": {"type": "minecraft:binomial", "n": 1, "p": 0.1},
       "entries": [
-        {"type": "minecraft:item", "name": "#c:nuggets", "weight": 10},
-        {"type": "minecraft:item", "name": "#c:plates",  "weight": 3}
+        {"type": "minecraft:tag", "name": "c:nuggets", "weight": 18, "expand": true},
+        {"type": "minecraft:tag", "name": "c:plates",  "weight": 1, "expand": true},
+        {"type": "minecraft:tag", "name": "c:shards",  "weight": 4, "expand": true},
+        {"type": "minecraft:tag", "name": "c:crystal",  "weight": 5, "expand": true},
+        {"type": "minecraft:tag", "name": "c:clumps",  "weight": 3, "expand": true}
       ]
     }
   ]

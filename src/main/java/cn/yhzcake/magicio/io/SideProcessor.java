@@ -76,6 +76,15 @@ public interface SideProcessor {
     default void setProcessTime(int time) {
     }
 
+    /** 返回输入是否有变化（用于配方重检），默认返回 false */
+    default boolean isInputsChanged() {
+        return false;
+    }
+
+    /** 设置输入变化标志，默认无操作 */
+    default void setInputsChanged(boolean changed) {
+    }
+
     void writeToStream(FriendlyByteBuf buf);
 
     boolean readFromStream(FriendlyByteBuf buf);
