@@ -69,6 +69,10 @@ public abstract class AbstractSideProcessor implements SideProcessor {
         return outputItemSlots;
     }
 
+    public Set<Integer> getFluidSlots() {
+        return fluidSlots;
+    }
+
     public AbstractSideProcessor(Direction side, ZhenType zhenType, BlockPos pos, Level level) {
         this.side = side;
         this.zhenType = zhenType;

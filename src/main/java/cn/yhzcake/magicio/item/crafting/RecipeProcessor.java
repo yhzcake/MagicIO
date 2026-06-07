@@ -110,7 +110,10 @@ public class RecipeProcessor {
                     if (tryCompleteRecipe(level, pos, state, partition, items, tanks, ioProcessor, zoneFaceAccess, centerDrop, onChanged)) {
                         MagicIO.LOGGER.trace("[{}] processTick: recipe {} output produced successfully", pos.toShortString(), state.currentRecipe.getZhenTypeStr());
                         state.processTime = 0;
+                        // 无输入配方的自动重检：配方完成后立即允许再次匹配
+                        boolean noInputs = state.currentRecipe.getInputs().isEmpty();
                         state.currentRecipe = null;
+                        if (noInputs) state.inputsChanged = true;
                     } else {
                         MagicIO.LOGGER.trace("[{}] processTick: recipe {} output FAILED (output full?), backing off by {} ticks", pos.toShortString(), state.currentRecipe.getZhenTypeStr(), PROCESS_COLL_SPEED);
                         state.processTime = Math.max(0, state.processTime - PROCESS_COLL_SPEED);
@@ -207,14 +210,14 @@ public class RecipeProcessor {
             return false;
         }
         if (!canFitFluidZoneOutputs(fluidOutputs, partition, tanks, tankCapacity)) {
-            MagicIO.LOGGER.trace("[{}] tryCompleteRecipe: FAILED canFitFluidZoneOutputs", pos.toShortString());
+            MagicIO.LOGGER.info("[{}] tryCompleteRecipe: FAILED canFitFluidZoneOutputs (tankCapacity={}, fluidOutputs={})", pos.toShortString(), tankCapacity, fluidOutputs);
             return false;
         }
         if (!canConsumeAllFluids(recipe, partition, tanks)) {
-            MagicIO.LOGGER.trace("[{}] tryCompleteRecipe: FAILED canConsumeAllFluids", pos.toShortString());
+            MagicIO.LOGGER.info("[{}] tryCompleteRecipe: FAILED canConsumeAllFluids", pos.toShortString());
             return false;
         }
-        MagicIO.LOGGER.trace("[{}] tryCompleteRecipe: all checks passed, executing...", pos.toShortString());
+        MagicIO.LOGGER.info("[{}] tryCompleteRecipe: all checks passed, executing...", pos.toShortString());
 
         // 执行消耗
         for (RecipeInput<?> input : recipe.getInputs()) {
@@ -249,12 +252,20 @@ public class RecipeProcessor {
                     NonNullList<FluidStack> outputFluids = fluidOutputs.get(output.zoneName());
                     if (outputFluids != null) {
                         produceFluidInZone(zone, outputFluids, partition, tanks, tankCapacity);
+                        // 验证产出
+                        for (int i = 0; i < tanks.size(); i++) {
+                            if (!tanks.get(i).isEmpty()) {
+                                MagicIO.LOGGER.info("[{}] tryCompleteRecipe: tank[{}] now has {}mb of fluid {}",
+                                    pos.toShortString(), i, tanks.get(i).getAmount(), tanks.get(i).getFluid());
+                            }
+                        }
                     }
                 }
             }
         }
 
         if (onChanged != null) onChanged.run();
+        MagicIO.LOGGER.info("[{}] tryCompleteRecipe: SUCCESS", pos.toShortString());
         return true;
     }
 
@@ -520,16 +531,16 @@ public class RecipeProcessor {
         MagicIO.LOGGER.trace("[{}] handleDropOutput: dropping {} items towards {}: {}", pos.toShortString(), dropItems.size(), dropDir, dropItems);
 
         if (centerDrop) {
-            boolean canDrop = level.getBlockState(pos.relative(dropDir)).isAir();
-            if (!canDrop) return;
             Vec3 center = Vec3.atCenterOf(pos);
             for (ItemStack stack : dropItems) {
                 if (stack.isEmpty()) continue;
-                ItemEntity item = new ItemEntity(level, center.x, center.y - 0.5, center.z, stack, 0, 0, 0);
+                ItemEntity item = new ItemEntity(level, center.x, center.y - 0.4, center.z, stack, 0, 0, 0);
                 item.setDefaultPickUpDelay();
                 level.addFreshEntity(item);
             }
         } else {
+            boolean canDrop = level.getBlockState(pos.relative(dropDir)).isAir();
+            if (!canDrop) return;
             WorldDropIOComponent dropComponent = new WorldDropIOComponent(level, pos, dropDir);
             for (ItemStack stack : dropItems) {
                 dropComponent.produce(stack);

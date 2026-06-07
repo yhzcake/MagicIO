@@ -44,8 +44,10 @@ public class FluidIOComponent implements IOComponent<Object, FluidStack> {
         this.onChange = onChanged;
     }
 
-    private void notifyChanged() {
-        onChange.run();
+    public void notifyChanged() {
+        if (onChange != null) {
+            onChange.run();
+        }
     }
 
     // ===== 查询 =====

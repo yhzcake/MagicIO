@@ -4,8 +4,14 @@ import org.jspecify.annotations.Nullable;
 
 import com.mojang.serialization.MapCodec;
 
+import cn.yhzcake.magicio.MagicIO;
+import cn.yhzcake.magicio.block.zhen.ZhenTypes;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
+import net.minecraft.world.InteractionHand;
+import net.minecraft.world.InteractionResult;
 import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.BlockGetter;
@@ -16,6 +22,7 @@ import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.entity.BlockEntityTicker;
 import net.minecraft.world.level.block.entity.BlockEntityType;
 import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.shapes.CollisionContext;
 import net.minecraft.world.phys.shapes.Shapes;
 import net.minecraft.world.phys.shapes.VoxelShape;
@@ -76,12 +83,40 @@ public class ZhenBusBlock extends BaseEntityBlock {
     }
 
     @Override
+    public void setPlacedBy(Level level, BlockPos pos, BlockState state, @Nullable LivingEntity placer, ItemStack stack) {
+        super.setPlacedBy(level, pos, state, placer, stack);
+        if (level.isClientSide()) return;
+        if (level.getBlockEntity(pos) instanceof ZhenBusBlockEntity be) {
+            be.addProcessor(ZhenTypes.SMALL_SIFT_ZHEN.get(), Direction.DOWN, null);
+        }
+    }
+
+    @Override
     public void playerDestroy(Level level, Player player, BlockPos pos, BlockState state, @Nullable BlockEntity blockEntity, ItemStack stack) {
         if (blockEntity instanceof ZhenBusBlockEntity host) {
             for (ItemStack drop : host.collectDrops()) {
                 Block.popResource(level, pos, drop);
             }
         }
+    }
+
+    @Override
+    protected InteractionResult useWithoutItem(BlockState state, Level level, BlockPos pos, Player player, BlockHitResult hitResult) {
+        return InteractionResult.PASS;
+    }
+
+    @Override
+    protected InteractionResult useItemOn(ItemStack stack, BlockState state, Level level, BlockPos pos, Player player, InteractionHand hand, BlockHitResult hitResult) {
+        if (level.isClientSide()) return InteractionResult.SUCCESS;
+        if (!stack.is(MagicIO.EXAMPLE_ITEM.get())) return InteractionResult.PASS;
+
+        if (level.getBlockEntity(pos) instanceof ZhenBusBlockEntity be) {
+            be.addProcessor(ZhenTypes.SMALL_DEW_ZHEN.get(), Direction.DOWN, player);
+            be.markForUpdate();
+            level.invalidateCapabilities(pos);
+            return InteractionResult.SUCCESS;
+        }
+        return InteractionResult.PASS;
     }
 
     @Override

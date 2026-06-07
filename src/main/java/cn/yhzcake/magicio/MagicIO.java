@@ -21,6 +21,7 @@ import cn.yhzcake.magicio.io.EnergyIOComponent;
 import cn.yhzcake.magicio.io.FluidIOComponent;
 import cn.yhzcake.magicio.io.IOType;
 import cn.yhzcake.magicio.io.ItemIOComponent;
+import cn.yhzcake.magicio.io.LinkedFluidHandler;
 import cn.yhzcake.magicio.io.LinkedItemHandler;
 import cn.yhzcake.magicio.io.ModIOTypes;
 import cn.yhzcake.magicio.io.SideProcessor;
@@ -172,11 +173,33 @@ public class MagicIO {
                     return handler;
                 }
         );
-        registerZhenBusCap(event, Capabilities.Fluid.BLOCK, ModIOTypes.FLUID.get(), (comp) -> {
-            if (!(comp instanceof FluidIOComponent fluidComp)) return null;
-            return new FluidStacksResourceHandler(fluidComp.getTanks(),
-                    fluidComp.getTankCapacity() != null ? fluidComp.getTankCapacity() : 0);
-        });
+        // ZhenBus FLUID — LinkedFluidHandler 避免列表拷贝，区分输入/输出罐位
+        event.registerBlockEntity(
+                Capabilities.Fluid.BLOCK,
+                ModZhenBusBlocks.ZHEN_BUS_BE.get(),
+                (be, direction) -> {
+                    if (direction == null) return null;
+                    SideProcessor processor = be.getProcessor(direction);
+                    if (processor == null) return null;
+                    Map<IOType, Set<Integer>> access = processor.getFaceAccess(direction);
+                    if (access == null) return null;
+                    Set<Integer> slots = access.get(ModIOTypes.FLUID.get());
+                    if (slots == null || slots.isEmpty()) return null;
+                    Object raw = processor.getIOProcessor().get(ModIOTypes.FLUID.get());
+                    if (!(raw instanceof FluidIOComponent fluidIO)) return null;
+                    AbstractSideProcessor asp = (AbstractSideProcessor) processor;
+                    LinkedFluidHandler handler = new LinkedFluidHandler(
+                            fluidIO.getTanks(),
+                            fluidIO.getTankCapacity() != null ? fluidIO.getTankCapacity() : 0,
+                            asp.getFluidSlots(),    // 输入和输出都可以
+                            asp.getFluidSlots());    // 流体目前不区分输入/输出罐位
+                    handler.setOnChange(() -> {
+                        fluidIO.notifyChanged();
+                        be.setChanged();
+                    });
+                    return handler;
+                }
+        );
         registerZhenBusCap(event, Capabilities.Energy.BLOCK, ModIOTypes.ENERGY.get(), (comp) -> {
             if (!(comp instanceof EnergyIOComponent energyComp)) return null;
             return energyComp.getHandler();

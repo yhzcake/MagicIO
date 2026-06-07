@@ -73,7 +73,10 @@ public class ZhenTypes {
         }
 
         try {
-            return ZhenType.ZHEN_TYPES.get(Identifier.fromNamespaceAndPath(MagicIO.MOD_ID, name))
+            // name 可能已是完整 id（如 "magic_io:small_dew_zhen"），
+            // 也可能是纯路径（如 "small_dew_zhen"），使用 Identifier.parse 正确处理
+            Identifier id = name.contains(":") ? Identifier.parse(name) : Identifier.fromNamespaceAndPath(MagicIO.MOD_ID, name);
+            return ZhenType.ZHEN_TYPES.get(id)
                     .map(Reference::value).orElse(SMALL_SIFT_ZHEN.get());
         } catch (Exception e) {
             return SMALL_SIFT_ZHEN.get();

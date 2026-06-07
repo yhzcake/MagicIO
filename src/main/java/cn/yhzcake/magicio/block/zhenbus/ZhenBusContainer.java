@@ -15,9 +15,11 @@ import cn.yhzcake.magicio.io.SideProcessor;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.core.NonNullList;
+import net.minecraft.nbt.CompoundTag;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.Level;
+import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.storage.ValueInput;
 import net.minecraft.world.level.storage.ValueOutput;
 import net.minecraft.world.phys.shapes.BooleanOp;
@@ -39,9 +41,23 @@ public class ZhenBusContainer {
     }
 
     public SideProcessor add(ZhenType type, Direction dir, Level level, BlockPos pos, Player player) {
+        // 收集旧处理器的掉落物（覆盖替换时）
+        SideProcessor old = storage.get(dir);
+        if (old != null) {
+            List<ItemStack> drops = new ArrayList<>();
+            old.addDrops(drops);
+            for (ItemStack drop : drops) {
+                Block.popResource(level, pos, drop);
+            }
+            old.onRemove();
+        }
+
         SideProcessor processor = new AbstractSideProcessor(dir, type, pos, level) {};
         processor.onAdd();
+        processor.setChangeCallback(onChanged);
+        processor.setInputsChanged(true);
         storage.set(dir, processor);
+        level.invalidateCapabilities(pos);
         onChanged.run();
         return processor;
     }
@@ -49,8 +65,11 @@ public class ZhenBusContainer {
     public void remove(Direction dir) {
         SideProcessor processor = storage.get(dir);
         if (processor != null) {
+            Level level = processor.getLevel();
+            BlockPos pos = processor.getPos();
             processor.onRemove();
             storage.remove(dir);
+            if (level != null) level.invalidateCapabilities(pos);
             onChanged.run();
         }
     }
@@ -109,83 +128,124 @@ public class ZhenBusContainer {
     private static final Codec<List<ItemStack>> ITEMS_CODEC = ItemStack.CODEC.listOf();
     private static final Codec<List<FluidStack>> FLUIDS_CODEC = FluidStack.CODEC.listOf();
 
+    public static Codec<List<ItemStack>> getItemsCodec() { return ITEMS_CODEC; }
+    public static Codec<List<FluidStack>> getFluidsCodec() { return FLUIDS_CODEC; }
+
     public void writeToNBT(ValueOutput output) {
         for (Direction dir : Direction.values()) {
             SideProcessor processor = storage.get(dir);
             if (processor == null) continue;
+            writeProcessorToNBT(output, dir, processor);
+        }
+    }
 
-            String prefix = dir.getName();
-            output.putString(prefix + "_type", processor.getZhenType().getType());
-            output.putInt(prefix + "_process_time", processor.getProcessTime());
-            output.putBoolean(prefix + "_inputs_changed", processor.isInputsChanged());
+    /** 直接写入 {@link CompoundTag} 供 {@code getUpdateTag} 使用。 */
+    public void writeToUpdateTag(net.minecraft.nbt.CompoundTag tag) {
+        for (Direction dir : Direction.values()) {
+            SideProcessor processor = storage.get(dir);
+            if (processor == null) continue;
+            net.minecraft.nbt.CompoundTag sideTag = new net.minecraft.nbt.CompoundTag();
+            sideTag.putString("type", processor.getZhenType().getType());
+            sideTag.putInt("processing_time", processor.getProcessTime());
+            sideTag.putBoolean("inputs_changed", processor.isInputsChanged());
 
             NonNullList<ItemStack> procItems = processor.getItemsForSerialization();
             if (procItems != null) {
                 List<ItemStack> nonEmpty = new ArrayList<>();
                 for (ItemStack stack : procItems) {
-                    if (!stack.isEmpty()) {          // 过滤空物品，避免 ItemStack.CODEC 严格验证失败
+                    if (!stack.isEmpty()) {
                         nonEmpty.add(stack.copy());
                     }
                 }
-                output.store(prefix + "_items", ITEMS_CODEC, nonEmpty);
+                if (!nonEmpty.isEmpty()) {
+                    sideTag.put("items", ITEMS_CODEC.encodeStart(
+                            net.minecraft.nbt.NbtOps.INSTANCE, nonEmpty).result().orElse(new net.minecraft.nbt.ListTag()));
+                }
             }
 
             NonNullList<FluidStack> procFluids = processor.getFluidsForSerialization();
             if (procFluids != null) {
                 List<FluidStack> nonEmpty = new ArrayList<>();
                 for (FluidStack fs : procFluids) {
-                    if (!fs.isEmpty()) {              // 过滤空流体
+                    if (!fs.isEmpty()) {
                         nonEmpty.add(fs.copy());
                     }
                 }
-                output.store(prefix + "_fluids", FLUIDS_CODEC, nonEmpty);
+                if (!nonEmpty.isEmpty()) {
+                    sideTag.put("fluids", FLUIDS_CODEC.encodeStart(
+                            net.minecraft.nbt.NbtOps.INSTANCE, nonEmpty).result().orElse(new net.minecraft.nbt.ListTag()));
+                }
             }
+
+            tag.put(dir.getName(), sideTag);
+        }
+    }
+
+    private void writeProcessorToNBT(ValueOutput output, Direction dir, SideProcessor processor) {
+        ValueOutput child = output.child(dir.getName());
+        child.putString("type", processor.getZhenType().getType());
+        child.putInt("processing_time", processor.getProcessTime());
+        child.putBoolean("inputs_changed", processor.isInputsChanged());
+
+        NonNullList<ItemStack> procItems = processor.getItemsForSerialization();
+        if (procItems != null) {
+            List<ItemStack> nonEmpty = new ArrayList<>();
+            for (ItemStack stack : procItems) {
+                if (!stack.isEmpty()) {
+                    nonEmpty.add(stack.copy());
+                }
+            }
+            child.store("items", ITEMS_CODEC, nonEmpty);
+        }
+
+        NonNullList<FluidStack> procFluids = processor.getFluidsForSerialization();
+        if (procFluids != null) {
+            List<FluidStack> nonEmpty = new ArrayList<>();
+            for (FluidStack fs : procFluids) {
+                if (!fs.isEmpty()) {
+                    nonEmpty.add(fs.copy());
+                }
+            }
+            child.store("fluids", FLUIDS_CODEC, nonEmpty);
         }
     }
 
     public void readFromNBT(ValueInput input, Level level, BlockPos pos) {
         for (Direction dir : Direction.values()) {
-            String prefix = dir.getName();
-            String typeName = input.getString(prefix + "_type").orElse("");
-            if (typeName.isEmpty()) continue;
+            String key = dir.getName();
+            input.child(key).ifPresent(child -> {
+                String typeName = child.getString("type").orElse("");
+                if (typeName.isEmpty()) return;
 
-            ZhenType type = ZhenTypes.getType(typeName);
-            if (type == null) continue;
+                ZhenType type = ZhenTypes.getType(typeName);
+                if (type == null) return;
 
-            AbstractSideProcessor processor = new AbstractSideProcessor(dir, type, pos, level) {};
-            processor.setProcessTime(input.getIntOr(prefix + "_process_time", 0));
-            // 从 NBT 加载后强制配方重检（防止重开游戏后 inputsChanged=false 导致配方不启动）
-            processor.setInputsChanged(input.getBooleanOr(prefix + "_inputs_changed", true));
-
-            NonNullList<ItemStack> procItems = processor.getItemsForSerialization();
-            if (procItems != null) {
-                List<ItemStack> loaded = input.read(prefix + "_items", ITEMS_CODEC).orElse(List.of());
-                for (int i = 0; i < procItems.size(); i++) {
-                    if (i < loaded.size()) {
-                        procItems.set(i, loaded.get(i).copy());
-                    } else {
-                        procItems.set(i, ItemStack.EMPTY);  // 缺失的槽位补空
-                    }
+                AbstractSideProcessor processor = new AbstractSideProcessor(dir, type, pos, level) {};
+                processor.setProcessTime(child.getIntOr("processing_time", 0));
+                processor.setInputsChanged(true);
+                // 自动恢复所有 IOType 组件
+                for (cn.yhzcake.magicio.io.IOComponent<?, ?> component : processor.getIOProcessor().getAll()) {
+                    component.loadNBT(child);
                 }
-            }
-
-            NonNullList<FluidStack> procFluids = processor.getFluidsForSerialization();
-            if (procFluids != null) {
-                List<FluidStack> loaded = input.read(prefix + "_fluids", FLUIDS_CODEC).orElse(List.of());
-                for (int i = 0; i < procFluids.size(); i++) {
-                    if (i < loaded.size()) {
-                        procFluids.set(i, loaded.get(i).copy());
-                    } else {
-                        procFluids.set(i, FluidStack.EMPTY);  // 缺失的槽位补空
-                    }
-                }
-            }
-
-            storage.set(dir, processor);
+                processor.setChangeCallback(onChanged);
+                storage.set(dir, processor);
+            });
         }
     }
 
     public void setChangeCallback(Runnable onChanged) {
         this.onChanged = onChanged;
+        // 传播到已有处理器：确保 NBT 加载后变更能被持久化
+        for (SideProcessor p : storage.all()) {
+            p.setChangeCallback(onChanged);
+        }
+    }
+
+    public Runnable getChangeCallback() {
+        return onChanged;
+    }
+
+    public ZhenBusStorage getStorage() {
+        return storage;
     }
 }
