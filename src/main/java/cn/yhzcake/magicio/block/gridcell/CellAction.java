@@ -1,6 +1,7 @@
 package cn.yhzcake.magicio.block.gridcell;
 
 import java.util.Objects;
+import java.util.function.Supplier;
 
 import org.jspecify.annotations.Nullable;
 
@@ -28,12 +29,12 @@ public class CellAction {
     public static Registry<CellAction> CELL_ACTIONS;
 
     private final Item item;
-    private final ElementType elementType;
+    private final Supplier<ElementType> elementTypeSupplier;
     private final int level;
 
-    public CellAction(Item item, ElementType elementType, int level) {
+    public CellAction(Item item, Supplier<ElementType> elementTypeSupplier, int level) {
         this.item = Objects.requireNonNull(item, "item is null");
-        this.elementType = elementType;
+        this.elementTypeSupplier = elementTypeSupplier;
         this.level = level;
     }
 
@@ -42,7 +43,7 @@ public class CellAction {
     }
 
     public ElementType getElementType() {
-        return elementType;
+        return elementTypeSupplier != null ? elementTypeSupplier.get() : null;
     }
 
     public int getLevel() {

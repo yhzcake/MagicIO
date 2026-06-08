@@ -239,6 +239,12 @@ public class ZhenBusBlockEntity extends BlockEntity implements ZhenBusHost {
         return new AbstractSideProcessor(dir, zhenType, pos, level) {};
     }
 
-    @Override public CompoundTag getUpdateTag(HolderLookup.Provider registries) { return super.getUpdateTag(registries); }
+    @Override
+    public CompoundTag getUpdateTag(HolderLookup.Provider registries) {
+        CompoundTag tag = super.getUpdateTag(registries);
+        container.writeToUpdateTag(tag);
+        return tag;
+    }
+
     @Override public Packet<ClientGamePacketListener> getUpdatePacket() { return ClientboundBlockEntityDataPacket.create(this); }
 }

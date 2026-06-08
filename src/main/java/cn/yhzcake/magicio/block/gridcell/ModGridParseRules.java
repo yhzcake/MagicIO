@@ -24,7 +24,7 @@ public class ModGridParseRules {
 
     public static void register(IEventBus eventBus) {
         SMALL_SIFT_ZHEN = GRID_PARSE_RULES.register("small_sift_zhen", () -> new GridParseRule(
-                ZhenTypes.SMALL_SIFT_ZHEN.get(),
+                () -> ZhenTypes.SMALL_SIFT_ZHEN.get(),
                 // 使用 GridPattern 构建匹配器
                 GridPattern.builder(5, GridPattern.MatchType.SHARP, new String[][]{
                         {"a", "a"},

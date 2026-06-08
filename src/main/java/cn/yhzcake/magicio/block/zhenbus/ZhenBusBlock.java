@@ -92,7 +92,7 @@ public class ZhenBusBlock extends BaseEntityBlock {
         super.setPlacedBy(level, pos, state, placer, stack);
         if (level.isClientSide()) return;
         if (level.getBlockEntity(pos) instanceof ZhenBusBlockEntity be) {
-            be.addProcessor(ZhenTypes.GRID_CELL.get(), Direction.DOWN, null);
+            be.addProcessor(ZhenTypes.SMALL_SIFT_ZHEN.get(), Direction.DOWN, null);
         }
     }
 

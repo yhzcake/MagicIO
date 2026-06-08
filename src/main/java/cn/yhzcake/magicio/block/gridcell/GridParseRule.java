@@ -3,6 +3,7 @@ package cn.yhzcake.magicio.block.gridcell;
 import java.util.Objects;
 import java.util.function.Consumer;
 import java.util.function.Predicate;
+import java.util.function.Supplier;
 
 import cn.yhzcake.magicio.MagicIO;
 import cn.yhzcake.magicio.block.zhen.ZhenType;
@@ -25,20 +26,20 @@ public class GridParseRule {
                     Identifier.fromNamespaceAndPath(MagicIO.MOD_ID, "grid_parse_rule"));
     public static Registry<GridParseRule> GRID_PARSE_RULES;
 
-    private final ZhenType zhenType;
+    private final Supplier<ZhenType> zhenTypeSupplier;
     private final Predicate<CellAction[][]> matcher;
     private final Consumer<GridParseContext> handler;
 
-    public GridParseRule(ZhenType zhenType,
+    public GridParseRule(Supplier<ZhenType> zhenTypeSupplier,
                          Predicate<CellAction[][]> matcher,
                          Consumer<GridParseContext> handler) {
-        this.zhenType = Objects.requireNonNull(zhenType, "zhenType is null");
+        this.zhenTypeSupplier = Objects.requireNonNull(zhenTypeSupplier, "zhenTypeSupplier is null");
         this.matcher = Objects.requireNonNull(matcher, "matcher is null");
         this.handler = Objects.requireNonNull(handler, "handler is null");
     }
 
     public ZhenType getZhenType() {
-        return zhenType;
+        return zhenTypeSupplier.get();
     }
 
     public Predicate<CellAction[][]> getMatcher() {
@@ -68,17 +69,17 @@ public class GridParseRule {
         if (this == o) return true;
         if (o == null || getClass() != o.getClass()) return false;
         GridParseRule that = (GridParseRule) o;
-        return Objects.equals(zhenType, that.zhenType);
+        return Objects.equals(zhenTypeSupplier.get(), that.zhenTypeSupplier.get());
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(zhenType);
+        return Objects.hash(zhenTypeSupplier.get());
     }
 
     @Override
     public String toString() {
-        return zhenType.toString();
+        return zhenTypeSupplier.get().toString();
     }
 
     @SubscribeEvent

@@ -8,6 +8,7 @@ import java.util.Set;
 
 import org.jspecify.annotations.Nullable;
 
+import cn.yhzcake.magicio.MagicIO;
 import cn.yhzcake.magicio.block.inventory.FaceAccessController;
 import cn.yhzcake.magicio.block.inventory.SlotPartition;
 import cn.yhzcake.magicio.block.inventory.SlotZone;
@@ -300,10 +301,11 @@ public abstract class AbstractSideProcessor implements SideProcessor {
     public void tick() {
         if (++tickCounter % tickInterval != 0) return;
 
-        // 懒汉跳过：无配方、无输入变化、无 tick 逻辑时跳过全部处理
         if (!hasWork() && !zhenType.hasTickFactory()) {
             return;
         }
+
+        int tank0Before = tanks.isEmpty() ? -1 : (tanks.get(0).isEmpty() ? 0 : tanks.get(0).getAmount());
 
         tickRefreshPorts();
 
@@ -323,7 +325,6 @@ public abstract class AbstractSideProcessor implements SideProcessor {
             this.inputsChanged = recipeState.inputsChanged;
             this.currentRecipe = recipeState.currentRecipe;
 
-            // 仅在直连其他 ZhenBus 时才推送输出（避免在无邻接方块时误操作）
             boolean hasAnyConnected = false;
             for (var port : virtualPorts.values()) {
                 if (port.hasDirectConnection()) { hasAnyConnected = true; break; }
@@ -335,6 +336,11 @@ public abstract class AbstractSideProcessor implements SideProcessor {
             if (needSync) {
                 level.sendBlockUpdated(pos, level.getBlockState(pos), level.getBlockState(pos), 3);
             }
+        }
+
+        int tank0After = tanks.isEmpty() ? -1 : (tanks.get(0).isEmpty() ? 0 : tanks.get(0).getAmount());
+        if (tank0Before != tank0After) {
+            MagicIO.LOGGER.info("[tick] {} tank[0] {}→{}", pos.toShortString(), tank0Before, tank0After);
         }
 
         zhenType.execute(level, pos, level.getBlockState(pos), null);

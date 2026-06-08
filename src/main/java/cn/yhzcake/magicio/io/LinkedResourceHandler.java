@@ -88,7 +88,6 @@ public abstract class LinkedResourceHandler<S, T extends Resource> implements Re
         Objects.checkIndex(slot, size());
         if (!canInsert[slot]) return 0;
         if (resource == null) return 0;
-        // 与 StacksResourceHandler 一致：空资源时也返回实际容量
         if (!resource.isEmpty() && !isValid(slot, resource)) return 0;
         return capacity(slot, resource);
     }
@@ -137,7 +136,6 @@ public abstract class LinkedResourceHandler<S, T extends Resource> implements Re
 
         int remaining = getAmount(existing) - extractable;
         stacks.set(idx, remaining > 0 ? setAmount(existing, remaining) : emptyInstance());
-        onChange.run();
         return extractable;
     }
 }

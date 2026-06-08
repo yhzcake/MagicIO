@@ -15,7 +15,7 @@ public record FluidStackWithTank(int tank, FluidStack fluid) {
             instance -> instance.group(
                     Codec.INT.fieldOf("tank").forGetter(FluidStackWithTank::tank),
                     FluidStack.CODEC.fieldOf("fluid").forGetter(FluidStackWithTank::fluid)
-            ).apply(instance, FluidStackWithTank::new));
+            ).apply(instance, (tank, fluid) -> new FluidStackWithTank(tank, fluid)));
 
     public FluidStackWithTank {
         fluid = fluid.copy();
