@@ -15,6 +15,10 @@ import cn.yhzcake.magicio.block.entity.ModBlockEntities;
 import cn.yhzcake.magicio.block.zhen.ZhenType;
 import cn.yhzcake.magicio.block.zhen.ZhenTypes;
 import cn.yhzcake.magicio.block.zhenbus.ModZhenBusBlocks;
+import cn.yhzcake.magicio.block.gridcell.CellAction;
+import cn.yhzcake.magicio.block.gridcell.ModCellActions;
+import cn.yhzcake.magicio.block.gridcell.GridParseRule;
+import cn.yhzcake.magicio.block.gridcell.ModGridParseRules;
 import cn.yhzcake.magicio.config.Config;
 import cn.yhzcake.magicio.io.AbstractSideProcessor;
 import cn.yhzcake.magicio.io.EnergyIOComponent;
@@ -87,6 +91,8 @@ public class MagicIO {
 
     public static final DeferredItem<BlockItem> ZHEN_BUS_ITEM = ITEMS.registerSimpleBlockItem("zhen_bus", ModZhenBusBlocks.ZHEN_BUS);
 
+    public static final DeferredItem<BlockItem> GRID_CELL_PANEL_ITEM = ITEMS.registerSimpleBlockItem("grid_cell_panel", ModBlocks.GRID_CELL_PANEL);
+
     public static final DeferredHolder<CreativeModeTab, CreativeModeTab> EXAMPLE_TAB = CREATIVE_MODE_TABS.register("example_tab", () -> CreativeModeTab.builder()
             .title(Component.translatable("itemGroup.magic_io"))
             .withTabsBefore(CreativeModeTabs.COMBAT)
@@ -97,6 +103,7 @@ public class MagicIO {
                     output.accept(blockItem.get());
                 }
                 output.accept(ZHEN_BUS_ITEM.get());
+                output.accept(GRID_CELL_PANEL_ITEM.get());
             }).build());
 
     public MagicIO(IEventBus modEventBus, net.neoforged.fml.ModContainer modContainer) {
@@ -109,6 +116,10 @@ public class MagicIO {
         ZhenTypes.register(modEventBus);
         modEventBus.register(IOType.class);
         ModIOTypes.register(modEventBus);
+        modEventBus.register(CellAction.class);
+        ModCellActions.register(modEventBus);
+        modEventBus.register(GridParseRule.class);
+        ModGridParseRules.register(modEventBus);
         ModBlocks.registerZhenBlocks(BLOCKS);
         ModBlocks.registerZhenBlockItems(ITEMS);
         BLOCKS.register(modEventBus);

@@ -5,6 +5,7 @@ import java.util.List;
 
 import org.jspecify.annotations.Nullable;
 
+import cn.yhzcake.magicio.block.gridcell.GridCellSideProcessor;
 import cn.yhzcake.magicio.block.zhen.ZhenType;
 import cn.yhzcake.magicio.block.zhen.ZhenTypes;
 import cn.yhzcake.magicio.io.AbstractSideProcessor;
@@ -112,25 +113,27 @@ public class ZhenBusBlockEntity extends BlockEntity implements ZhenBusHost {
                     if (type.isEmpty()) return;
                     ZhenType zhenType = ZhenTypes.getType(type);
                     if (zhenType == null) return;
-                    AbstractSideProcessor p = new AbstractSideProcessor(d, zhenType, worldPosition, level) {};
+                    SideProcessor p = createProcessorForType(d, zhenType, worldPosition, level);
                     p.setProcessTime(child.getIntOr("processing_time", 0));
                     p.setInputsChanged(true);
-                    // 恢复所有 IOType 组件（Fluid 单独处理）
-                    for (IOComponent<?, ?> component : p.getIOProcessor().getAll()) {
-                        if (component.type() == ModIOTypes.FLUID.get()) continue;
-                        component.loadNBT(child);
-                    }
-                    // Fluids — 从列表格式恢复
-                    Object rawFluid = p.getIOProcessor().get(ModIOTypes.FLUID.get());
-                    if (rawFluid instanceof FluidIOComponent fluidIO) {
-                        NonNullList<FluidStack> tanks = fluidIO.getTanks();
-                        child.read("Fluids", FluidStackWithTank.CODEC.listOf()).ifPresent(list -> {
-                            for (FluidStackWithTank entry : list) {
-                                if (entry.tank() >= 0 && entry.tank() < tanks.size()) {
-                                    tanks.set(entry.tank(), entry.fluid().copy());
+                    // 仅 AbstractSideProcessor 子类才有 IOProcessor，跳过 GridCellSideProcessor
+                    if (p instanceof AbstractSideProcessor ap) {
+                        for (IOComponent<?, ?> component : ap.getIOProcessor().getAll()) {
+                            if (component.type() == ModIOTypes.FLUID.get()) continue;
+                            component.loadNBT(child);
+                        }
+                        // Fluids
+                        Object rawFluid = ap.getIOProcessor().get(ModIOTypes.FLUID.get());
+                        if (rawFluid instanceof FluidIOComponent fluidIO) {
+                            NonNullList<FluidStack> tanks = fluidIO.getTanks();
+                            child.read("Fluids", FluidStackWithTank.CODEC.listOf()).ifPresent(list -> {
+                                for (FluidStackWithTank entry : list) {
+                                    if (entry.tank() >= 0 && entry.tank() < tanks.size()) {
+                                        tanks.set(entry.tank(), entry.fluid().copy());
+                                    }
                                 }
-                            }
-                        });
+                            });
+                        }
                     }
                     p.onAdd();
                     p.setChangeCallback(container.getChangeCallback());
@@ -189,30 +192,32 @@ public class ZhenBusBlockEntity extends BlockEntity implements ZhenBusHost {
             ZhenType type = ZhenTypes.getType(tn);
             if (type == null) continue;
 
-            AbstractSideProcessor p = new AbstractSideProcessor(d, type, worldPosition, level) {};
+            SideProcessor p = createProcessorForType(d, type, worldPosition, level);
             p.setProcessTime(sideTag.getIntOr("processing_time", 0));
             p.setInputsChanged(true);
             p.onAdd();
             p.setChangeCallback(container.getChangeCallback());
 
-            // 用 TagValueInput 转换 CompoundTag → ValueInput
-            ValueInput childInput = TagValueInput.create(
-                    ProblemReporter.DISCARDING, level.registryAccess(), sideTag);
-            for (IOComponent<?, ?> component : p.getIOProcessor().getAll()) {
-                if (component.type() == ModIOTypes.FLUID.get()) continue;
-                component.loadNBT(childInput);
-            }
-            // Fluids
-            Object rawFluid = p.getIOProcessor().get(ModIOTypes.FLUID.get());
-            if (rawFluid instanceof FluidIOComponent fluidIO) {
-                NonNullList<FluidStack> tanks = fluidIO.getTanks();
-                sideTag.read("Fluids", FluidStackWithTank.CODEC.listOf()).ifPresent(list -> {
-                    for (FluidStackWithTank entry : list) {
-                        if (entry.tank() >= 0 && entry.tank() < tanks.size()) {
-                            tanks.set(entry.tank(), entry.fluid().copy());
+            if (p instanceof AbstractSideProcessor ap) {
+                // 恢复 IOType 组件
+                ValueInput childInput = TagValueInput.create(
+                        ProblemReporter.DISCARDING, level.registryAccess(), sideTag);
+                for (IOComponent<?, ?> component : ap.getIOProcessor().getAll()) {
+                    if (component.type() == ModIOTypes.FLUID.get()) continue;
+                    component.loadNBT(childInput);
+                }
+                // Fluids
+                Object rawFluid = ap.getIOProcessor().get(ModIOTypes.FLUID.get());
+                if (rawFluid instanceof FluidIOComponent fluidIO) {
+                    NonNullList<FluidStack> tanks = fluidIO.getTanks();
+                    sideTag.read("Fluids", FluidStackWithTank.CODEC.listOf()).ifPresent(list -> {
+                        for (FluidStackWithTank entry : list) {
+                            if (entry.tank() >= 0 && entry.tank() < tanks.size()) {
+                                tanks.set(entry.tank(), entry.fluid().copy());
+                            }
                         }
-                    }
-                });
+                    });
+                }
             }
 
             container.getStorage().set(d, p);
@@ -221,6 +226,17 @@ public class ZhenBusBlockEntity extends BlockEntity implements ZhenBusHost {
 
     public static void serverTick(Level level, BlockPos pos, BlockState state, ZhenBusBlockEntity be) {
         be.container.tickAll();
+    }
+
+    /**
+     * 根据 ZhenType 创建对应的 SideProcessor 实例。
+     * grid_cell 类型创建 {@link GridCellSideProcessor}，其余创建 {@link AbstractSideProcessor}。
+     */
+    public static SideProcessor createProcessorForType(Direction dir, ZhenType zhenType, BlockPos pos, Level level) {
+        if ("magic_io:grid_cell".equals(zhenType.getType())) {
+            return new GridCellSideProcessor(dir, zhenType, pos, level);
+        }
+        return new AbstractSideProcessor(dir, zhenType, pos, level) {};
     }
 
     @Override public CompoundTag getUpdateTag(HolderLookup.Provider registries) { return super.getUpdateTag(registries); }

@@ -8,6 +8,7 @@ import org.jspecify.annotations.Nullable;
 
 import com.mojang.serialization.Codec;
 
+import cn.yhzcake.magicio.block.gridcell.GridCellSideProcessor;
 import cn.yhzcake.magicio.block.zhen.ZhenType;
 import cn.yhzcake.magicio.block.zhen.ZhenTypes;
 import cn.yhzcake.magicio.io.AbstractSideProcessor;
@@ -52,7 +53,12 @@ public class ZhenBusContainer {
             old.onRemove();
         }
 
-        SideProcessor processor = new AbstractSideProcessor(dir, type, pos, level) {};
+        SideProcessor processor;
+        if ("magic_io:grid_cell".equals(type.getType())) {
+            processor = new GridCellSideProcessor(dir, type, pos, level);
+        } else {
+            processor = new AbstractSideProcessor(dir, type, pos, level) {};
+        }
         processor.onAdd();
         processor.setChangeCallback(onChanged);
         processor.setInputsChanged(true);

@@ -22,6 +22,7 @@ public class ZhenTypes {
     public static final DeferredRegister<ZhenType> ZHEN_TYPES = DeferredRegister.create(ZhenType.ZHEN_TYPE_REGISTRY_KEY, MagicIO.MOD_ID);
     public static Supplier<ZhenType> SMALL_SIFT_ZHEN;
     public static Supplier<ZhenType> SMALL_DEW_ZHEN;
+    public static Supplier<ZhenType> GRID_CELL;
 
     public static Set<Integer> range(int start, int end) {
         return IntStream.range(start, end + 1).boxed().collect(Collectors.toSet());
@@ -59,7 +60,12 @@ public class ZhenTypes {
                             SmallDewMethod m = new SmallDewMethod(ctx.level(), ctx.pos(), ctx.state(), ctx.blockEntity());
                             m.small_dew_tick();
                         }, 1000));
-        
+
+        // GridCell 面：0 个槽位的 ZhenType，由 GridCellSideProcessor 接管全部逻辑
+        GRID_CELL = ZHEN_TYPES.register("grid_cell",
+                () -> new ZhenType(ElementTypes.EARTH.get(), "magic_io:grid_cell",
+                        SlotPartition.of(Map.of()), 0));
+
         ZHEN_TYPES.register(eventBus);
     }
 
