@@ -2,7 +2,6 @@ package cn.yhzcake.magicio;
 
 import java.io.InputStream;
 import java.util.Map;
-import java.util.Set;
 
 import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;
@@ -14,21 +13,10 @@ import cn.yhzcake.magicio.block.entity.AbstractZhenBlockEntity;
 import cn.yhzcake.magicio.block.entity.ModBlockEntities;
 import cn.yhzcake.magicio.block.zhen.ZhenType;
 import cn.yhzcake.magicio.block.zhen.ZhenTypes;
-import cn.yhzcake.magicio.block.zhenbus.ModZhenBusBlocks;
-import cn.yhzcake.magicio.block.gridcell.CellAction;
-import cn.yhzcake.magicio.block.gridcell.ModCellActions;
-import cn.yhzcake.magicio.block.gridcell.GridParseRule;
-import cn.yhzcake.magicio.block.gridcell.ModGridParseRules;
 import cn.yhzcake.magicio.config.Config;
-import cn.yhzcake.magicio.io.AbstractSideProcessor;
 import cn.yhzcake.magicio.io.EnergyIOComponent;
-import cn.yhzcake.magicio.io.FluidIOComponent;
 import cn.yhzcake.magicio.io.IOType;
-import cn.yhzcake.magicio.io.ItemIOComponent;
-import cn.yhzcake.magicio.io.LinkedFluidHandler;
-import cn.yhzcake.magicio.io.LinkedItemHandler;
 import cn.yhzcake.magicio.io.ModIOTypes;
-import cn.yhzcake.magicio.io.SideProcessor;
 import cn.yhzcake.magicio.item.ModDataComponents;
 import cn.yhzcake.magicio.item.ModItems;
 import cn.yhzcake.magicio.item.crafting.ModRecipeManager;
@@ -43,7 +31,6 @@ import net.minecraft.server.packs.resources.Resource;
 import net.minecraft.server.packs.resources.ResourceManager;
 import net.minecraft.server.packs.resources.SimplePreparableReloadListener;
 import net.minecraft.util.profiling.ProfilerFiller;
-import net.minecraft.core.Direction;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.network.chat.Component;
@@ -70,7 +57,6 @@ import net.neoforged.neoforge.registries.DeferredBlock;
 import net.neoforged.neoforge.registries.DeferredHolder;
 import net.neoforged.neoforge.registries.DeferredItem;
 import net.neoforged.neoforge.registries.DeferredRegister;
-import net.neoforged.neoforge.capabilities.BlockCapability;
 import net.neoforged.neoforge.capabilities.Capabilities;
 import net.neoforged.neoforge.capabilities.RegisterCapabilitiesEvent;
 import net.neoforged.neoforge.transfer.fluid.FluidStacksResourceHandler;
@@ -89,9 +75,6 @@ public class MagicIO {
     public static final DeferredItem<Item> EXAMPLE_ITEM = ITEMS.registerSimpleItem("example_item", p -> p.food(new FoodProperties.Builder()
             .alwaysEdible().nutrition(1).saturationModifier(2f).build()));
 
-    public static final DeferredItem<BlockItem> ZHEN_BUS_ITEM = ITEMS.registerSimpleBlockItem("zhen_bus", ModZhenBusBlocks.ZHEN_BUS);
-
-    public static final DeferredItem<BlockItem> GRID_CELL_PANEL_ITEM = ITEMS.registerSimpleBlockItem("grid_cell_panel", ModBlocks.GRID_CELL_PANEL);
 
     public static final DeferredHolder<CreativeModeTab, CreativeModeTab> EXAMPLE_TAB = CREATIVE_MODE_TABS.register("example_tab", () -> CreativeModeTab.builder()
             .title(Component.translatable("itemGroup.magic_io"))
@@ -102,8 +85,6 @@ public class MagicIO {
                 for (var blockItem : ModBlocks.ZHEN_BLOCK_ITEMS.values()) {
                     output.accept(blockItem.get());
                 }
-                output.accept(ZHEN_BUS_ITEM.get());
-                output.accept(GRID_CELL_PANEL_ITEM.get());
             }).build());
 
     public MagicIO(IEventBus modEventBus, net.neoforged.fml.ModContainer modContainer) {
@@ -116,16 +97,10 @@ public class MagicIO {
         ZhenTypes.register(modEventBus);
         modEventBus.register(IOType.class);
         ModIOTypes.register(modEventBus);
-        modEventBus.register(CellAction.class);
-        ModCellActions.register(modEventBus);
-        modEventBus.register(GridParseRule.class);
-        ModGridParseRules.register(modEventBus);
         ModBlocks.registerZhenBlocks(BLOCKS);
         ModBlocks.registerZhenBlockItems(ITEMS);
         BLOCKS.register(modEventBus);
         ITEMS.register(modEventBus);
-        ModZhenBusBlocks.BLOCKS.register(modEventBus);
-        ModZhenBusBlocks.BLOCK_ENTITIES.register(modEventBus);
         ModBlockEntities.BLOCK_ENTITIES.register(modEventBus);
         ModItems.register(modEventBus);
         ModRecipeManager.register(modEventBus);
@@ -156,86 +131,6 @@ public class MagicIO {
                     EnergyIOComponent energyComponent = ((AbstractZhenBlockEntity) be).getEnergyIOComponent();
                     if (energyComponent == null) return null;
                     return energyComponent.getHandler();
-                }
-        );
-
-        // ZhenBus ITEM（内联注册以接入变更通知链）
-        event.registerBlockEntity(
-                Capabilities.Item.BLOCK,
-                ModZhenBusBlocks.ZHEN_BUS_BE.get(),
-                (be, direction) -> {
-                    if (direction == null) return null;
-                    SideProcessor processor = be.getProcessor(direction);
-                    if (processor == null) return null;
-                    Map<IOType, Set<Integer>> access = processor.getFaceAccess(direction);
-                    if (access == null) return null;
-                    Set<Integer> slots = access.get(ModIOTypes.ITEM.get());
-                    if (slots == null || slots.isEmpty()) return null;
-                    Object raw = processor.getIOProcessor().get(ModIOTypes.ITEM.get());
-                    if (!(raw instanceof ItemIOComponent itemIO)) return null;
-                    // 管道只能向输入槽插入、从输出槽提取
-                    AbstractSideProcessor asp = (AbstractSideProcessor) processor;
-                    LinkedItemHandler handler = new LinkedItemHandler(itemIO.getItems(),
-                            asp.getInputItemSlots(), asp.getOutputItemSlots());
-                    handler.setOnChange(() -> {
-                        itemIO.notifyChanged();
-                        be.setChanged();
-                    });
-                    return handler;
-                }
-        );
-        // ZhenBus FLUID — LinkedFluidHandler 避免列表拷贝，区分输入/输出罐位
-        event.registerBlockEntity(
-                Capabilities.Fluid.BLOCK,
-                ModZhenBusBlocks.ZHEN_BUS_BE.get(),
-                (be, direction) -> {
-                    if (direction == null) return null;
-                    SideProcessor processor = be.getProcessor(direction);
-                    if (processor == null) return null;
-                    Map<IOType, Set<Integer>> access = processor.getFaceAccess(direction);
-                    if (access == null) return null;
-                    Set<Integer> slots = access.get(ModIOTypes.FLUID.get());
-                    if (slots == null || slots.isEmpty()) return null;
-                    Object raw = processor.getIOProcessor().get(ModIOTypes.FLUID.get());
-                    if (!(raw instanceof FluidIOComponent fluidIO)) return null;
-                    AbstractSideProcessor asp = (AbstractSideProcessor) processor;
-                    LinkedFluidHandler handler = new LinkedFluidHandler(
-                            fluidIO.getTanks(),
-                            fluidIO.getTankCapacity() != null ? fluidIO.getTankCapacity() : 0,
-                            asp.getFluidSlots(),    // 输入和输出都可以
-                            asp.getFluidSlots());    // 流体目前不区分输入/输出罐位
-                    handler.setOnChange(() -> {
-                        fluidIO.notifyChanged();
-                        be.setChanged();
-                    });
-                    return handler;
-                }
-        );
-        registerZhenBusCap(event, Capabilities.Energy.BLOCK, ModIOTypes.ENERGY.get(), (comp) -> {
-            if (!(comp instanceof EnergyIOComponent energyComp)) return null;
-            return energyComp.getHandler();
-        });
-    }
-
-    private static <T, C> void registerZhenBusCap(RegisterCapabilitiesEvent event,
-            BlockCapability<T, @Nullable Direction> cap, IOType ioType,
-            java.util.function.Function<Object, T> handlerFactory) {
-        event.registerBlockEntity(
-                (BlockCapability<T, @Nullable Direction>) cap,
-                ModZhenBusBlocks.ZHEN_BUS_BE.get(),
-                (be, direction) -> {
-                    if (direction == null) return null;
-                    SideProcessor processor = be.getProcessor(direction);
-                    if (processor == null) return null;
-                    if (ioType != ModIOTypes.ENERGY.get()) {
-                        Map<IOType, Set<Integer>> access = processor.getFaceAccess(direction);
-                        if (access == null) return null;
-                        Set<Integer> slots = access.get(ioType);
-                        if (slots == null || slots.isEmpty()) return null;
-                    }
-                    Object component = processor.getIOProcessor().get(ioType);
-                    if (component == null) return null;
-                    return handlerFactory.apply(component);
                 }
         );
     }

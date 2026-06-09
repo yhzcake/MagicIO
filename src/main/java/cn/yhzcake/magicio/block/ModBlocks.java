@@ -4,8 +4,6 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
-import cn.yhzcake.magicio.MagicIO;
-import cn.yhzcake.magicio.block.gridcell.GridCellPanelBlock;
 import cn.yhzcake.magicio.block.zhen.ZhenBlock;
 import cn.yhzcake.magicio.block.zhen.ZhenTypes;
 import net.minecraft.world.item.BlockItem;
@@ -18,11 +16,6 @@ public class ModBlocks {
     public static final Map<String, DeferredBlock<Block>> ZHEN_BLOCKS = new LinkedHashMap<>();
     public static final Map<String, DeferredItem<BlockItem>> ZHEN_BLOCK_ITEMS = new LinkedHashMap<>();
 
-    // ===== Grid Cell Panel =====
-
-    public static final DeferredBlock<Block> GRID_CELL_PANEL =
-            MagicIO.BLOCKS.registerBlock("grid_cell_panel",
-                    p -> new GridCellPanelBlock(p.noOcclusion()));
 
     // ===== 阵方块注册 =====
 
