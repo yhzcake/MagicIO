@@ -60,4 +60,9 @@ public class LinkedFluidHandler extends LinkedResourceHandler<FluidStack, FluidR
     protected FluidStack emptyInstance() {
         return FluidStack.EMPTY;
     }
+
+    @Override
+    protected FluidStack copyStack(FluidStack stack) {
+        return stack.copy();
+    }
 }

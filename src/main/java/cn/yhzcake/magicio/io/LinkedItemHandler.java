@@ -58,4 +58,9 @@ public class LinkedItemHandler extends LinkedResourceHandler<ItemStack, ItemReso
     protected ItemStack emptyInstance() {
         return ItemStack.EMPTY;
     }
+
+    @Override
+    protected ItemStack copyStack(ItemStack stack) {
+        return stack.copy();
+    }
 }
