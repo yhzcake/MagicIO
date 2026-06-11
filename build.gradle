@@ -17,11 +17,29 @@ sourceSets.main.resources {
     exclude("**/*.bbmodel")
     exclude("src/generated/**/.cache")
 }
-
+sourceSets.test.resources {
+    srcDir('src/generated/resources')
+    exclude("**/*.bbmodel")
+    exclude("src/generated/**/.cache")
+}
+sourceSets {
+    test {
+        compileClasspath += sourceSets.main.output + sourceSets.main.compileClasspath
+    }
+}
 repositories {
     maven { url = "https://maven.aliyun.com/repository/public" }
     maven { url = "https://maven.aliyun.com/repository/central" }
+    maven {
+        group = "curse.maven"
+        url = "https://cursemaven.com"
+    }
     mavenCentral()
+}
+
+dependencies {
+    implementation("org.appliedenergistics:appliedenergistics2:26.1.9-alpha")
+    implementation "curse.maven:ender-io-64578:8192909"
 }
 
 base {
@@ -68,8 +86,6 @@ configurations {
     runtimeClasspath.extendsFrom localRuntime
 }
 
-dependencies {
-}
 
 var generateModMetadata = tasks.register("generateModMetadata", ProcessResources) {
     var replaceProperties = [
