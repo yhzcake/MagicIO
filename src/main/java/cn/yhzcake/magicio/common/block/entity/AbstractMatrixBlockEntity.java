@@ -34,6 +34,19 @@ public class AbstractMatrixBlockEntity extends BaseContainerBlockEntity implemen
         this.partition = matrixType.getPartition();
         this.ioConfig = matrixType.getIoConfig();
     }
+
+    public MatrixType getMatrixType() {
+        return matrixType;
+    }
+
+    public IOPartition getPartition() {
+        return partition;
+    }
+
+    public IOConfig getIoConfig() {
+        return ioConfig;
+    }
+
     @Override
     protected NonNullList<ItemStack> getItems() {
         return this.items;
