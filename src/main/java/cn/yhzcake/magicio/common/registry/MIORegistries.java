@@ -6,21 +6,21 @@ import cn.yhzcake.magicio.common.sys.matrix.MatrixType;
 import net.minecraft.core.Registry;
 import net.minecraft.resources.Identifier;
 import net.minecraft.resources.ResourceKey;
-import net.neoforged.bus.api.IEventBus;
+import net.neoforged.neoforge.registries.NewRegistryEvent;
 import net.neoforged.neoforge.registries.RegistryBuilder;
 
 public class MIORegistries {
-    public static void register(IEventBus bus) {
-        bus.register(MATRIX);
-        bus.register(ELEMENTS);
+    public static void onRegistry(NewRegistryEvent event) {
+        event.register(MATRIX_TYPE_REGISTRY);
+        event.register(ELEMENT_TYPE_REGISTRY);
     }
 
-    public static final Registry<MatrixType> MATRIX = new RegistryBuilder<>(MIOKeys.MATRIX_TYPE_REGISTRY_KEY).create();
-    public static final Registry<ElementType> ELEMENTS = new RegistryBuilder<>(MIOKeys.ELEMENT_TYPE_REGISTRY_KEY).create();
+    public static final Registry<MatrixType> MATRIX_TYPE_REGISTRY = new RegistryBuilder<>(MIOKeys.MATRIX_TYPE_REGISTRY_KEY).sync(true).create();
+    public static final Registry<ElementType> ELEMENT_TYPE_REGISTRY = new RegistryBuilder<>(MIOKeys.ELEMENT_TYPE_REGISTRY_KEY).sync(true).create();
 
 
     public static final class MIOKeys {
         public static final ResourceKey<Registry<MatrixType>> MATRIX_TYPE_REGISTRY_KEY = ResourceKey.createRegistryKey(Identifier.fromNamespaceAndPath(MagicIO.MOD_ID, "matrix_type"));
-        public static final ResourceKey<Registry<ElementType>> ELEMENT_TYPE_REGISTRY_KEY = ResourceKey.createRegistryKey(Identifier.fromNamespaceAndPath(MagicIO.MOD_ID, "element_type"));
+        public static final ResourceKey<Registry<ElementType>> ELEMENT_TYPE_REGISTRY_KEY = ResourceKey.createRegistryKey(Identifier.fromNamespaceAndPath(MagicIO.MOD_ID, ElementType.PREFIX));
     }
 }

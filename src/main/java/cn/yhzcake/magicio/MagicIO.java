@@ -2,6 +2,7 @@ package cn.yhzcake.magicio;
 
 import cn.yhzcake.magicio.common.registry.MIOCommonBlocks;
 import cn.yhzcake.magicio.common.registry.MIOCommonItems;
+import cn.yhzcake.magicio.common.registry.MIOElementTypes;
 import cn.yhzcake.magicio.common.registry.MIORegistries;
 import com.mojang.logging.LogUtils;
 import net.neoforged.bus.api.IEventBus;
@@ -15,7 +16,8 @@ public class MagicIO {
     public static final Logger LOGGER = LogUtils.getLogger();
 
     public MagicIO(IEventBus bus, ModContainer container) {
-        MIORegistries.register(bus);
+        bus.addListener(MIORegistries::onRegistry);
+        MIOElementTypes.ELEMENT_TYPES.register(bus);
         MIOCommonBlocks.BLOCKS.register(bus);
         MIOCommonItems.ITEMS.register(bus);
     }
