@@ -59,6 +59,8 @@ import net.neoforged.neoforge.registries.DeferredItem;
 import net.neoforged.neoforge.registries.DeferredRegister;
 import net.neoforged.neoforge.capabilities.Capabilities;
 import net.neoforged.neoforge.capabilities.RegisterCapabilitiesEvent;
+import net.neoforged.neoforge.transfer.item.VanillaContainerWrapper;
+import net.neoforged.neoforge.transfer.item.WorldlyContainerWrapper;
 import net.neoforged.neoforge.transfer.fluid.FluidStacksResourceHandler;
 
 @Mod(MagicIO.MOD_ID)
@@ -115,6 +117,15 @@ public class MagicIO {
     }
 
     private void registerCapabilities(RegisterCapabilitiesEvent event) {
+        event.registerBlockEntity(
+                Capabilities.Item.BLOCK,
+                ModBlockEntities.ZHEN_BLOCK.get(),
+                (be, direction) -> {
+                    if (direction == null)
+                        return VanillaContainerWrapper.of((AbstractZhenBlockEntity) be);
+                    return new WorldlyContainerWrapper((AbstractZhenBlockEntity) be, direction);
+                }
+        );
         event.registerBlockEntity(
                 Capabilities.Fluid.BLOCK,
                 ModBlockEntities.ZHEN_BLOCK.get(),

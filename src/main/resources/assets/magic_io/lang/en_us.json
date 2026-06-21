@@ -26,6 +26,7 @@
   "element_type.magic_io.energy": "Energy",
   "element_type.magic_io.consciousness": "Soul",
   "element_type.magic_io.creative": "Creative",
+  "item.magic_io.coal_coke": "Coal Coke",
   "magic_io.configuration.title": "MagicIO Configs",
   "magic_io.configuration.section.magic_io.common.toml": "MagicIO Configs",
   "magic_io.configuration.section.magic_io.common.toml.title": "MagicIO Configs",

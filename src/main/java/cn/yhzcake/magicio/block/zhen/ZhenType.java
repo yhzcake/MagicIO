@@ -82,6 +82,12 @@ public class ZhenType {
         this(elementType, type, partition, level, tickFactory, null, null);
     }
 
+    public ZhenType(ElementType elementType, String type, SlotPartition partition, int level,
+            Map<Direction, Map<IOType, Set<String>>> faceZoneAccess
+    ) {
+        this(elementType, type, partition, level, null, null,null , faceZoneAccess, Map.of());
+    }
+
     public ZhenType(ElementType elementType, String type, SlotPartition partition, int level) {
         this(elementType, type, partition, level, null, null, null);
     }

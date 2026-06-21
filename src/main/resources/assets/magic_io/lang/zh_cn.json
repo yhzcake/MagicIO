@@ -26,6 +26,7 @@
   "element_type.magic_io.energy": "能量",
   "element_type.magic_io.consciousness": "灵魂",
   "element_type.magic_io.creative": "创造",
+  "item.magic_io.coal_coke": "焦煤",
   "magic_io.configuration.title": "枢革墟烬配置",
   "magic_io.configuration.section.magic_io.common.toml": "枢革墟烬配置",
   "magic_io.configuration.section.magic_io.common.toml.title": "枢革墟烬配置",

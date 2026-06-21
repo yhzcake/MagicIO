@@ -7,6 +7,7 @@ import java.util.Set;
 
 import org.jspecify.annotations.Nullable;
 
+import cn.yhzcake.magicio.MagicIO;
 import cn.yhzcake.magicio.block.inventory.FaceAccessController;
 import cn.yhzcake.magicio.block.inventory.SlotPartition;
 import cn.yhzcake.magicio.block.inventory.SlotZone;
@@ -72,6 +73,7 @@ public abstract class AbstractZhenBlockEntity extends BaseContainerBlockEntity i
     protected AbstractZhenBlockEntity(BlockPos worldPosition, BlockState blockState) {
         super(ModBlockEntities.ZHEN_BLOCK.get(), worldPosition, blockState);
         this.type = ZhenTypes.getType(BuiltInRegistries.BLOCK.getKey(blockState.getBlock()));
+        MagicIO.LOGGER.info("[ZhenBE] ctor blockState block={}, resolved type={}", BuiltInRegistries.BLOCK.getKey(blockState.getBlock()), this.type.getType());
         this.partition = this.type.getPartition();
         setItems(NonNullList.withSize(this.partition.getTotalSlots(ModIOTypes.ITEM.get()), ItemStack.EMPTY));
         this.tanks = NonNullList.withSize(this.partition.getTotalSlots(ModIOTypes.FLUID.get()), FluidStack.EMPTY);
@@ -124,6 +126,8 @@ public abstract class AbstractZhenBlockEntity extends BaseContainerBlockEntity i
     // ===== 面访问控制 =====
     public void initFaceAccess() {
         Map<Direction, Map<IOType, Set<Integer>>> defined = type.getFaceAccess();
+        MagicIO.LOGGER.info("[ZhenBE] initFaceAccess type={}, defined.isEmpty={}, defined={}",
+                type.getType(), defined.isEmpty(), defined);
         if (!defined.isEmpty()) {
             for (var dirEntry : defined.entrySet()) {
                 Direction dir = dirEntry.getKey();
@@ -131,8 +135,10 @@ public abstract class AbstractZhenBlockEntity extends BaseContainerBlockEntity i
                     faceAccessController.setSlotsForFace(dir, typeEntry.getKey(), typeEntry.getValue());
                 }
             }
+            MagicIO.LOGGER.info("[ZhenBE] initFaceAccess: applied custom faceAccess, controller ioFaceAccess={}", faceAccessController.getIoFaceAccess());
             return;
         }
+        MagicIO.LOGGER.info("[ZhenBE] initFaceAccess: fallback to default faceAccess, partition zoneMappings={}", partition.getMappings().keySet());
         faceAccessController.setSlotsForFace(Direction.UP, ModIOTypes.ITEM.get(), partition.getSlots(ModIOTypes.ITEM.get(), SlotZone.DROP_OUTPUT));
         faceAccessController.setZoneForFace(Direction.UP, SlotZone.DROP_OUTPUT.getName());
         faceAccessController.setSlotsForFace(Direction.DOWN, ModIOTypes.ITEM.get(), partition.getSlots(ModIOTypes.ITEM.get(), SlotZone.ITEM_OUTPUT_ALL));

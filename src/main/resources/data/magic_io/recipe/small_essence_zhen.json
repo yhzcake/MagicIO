@@ -1,0 +1,15 @@
+{
+  "type": "magic_io:zhen_block",
+  "zhen_type": "magic_io:small_essence_zhen",
+  "inputs": {
+    "item_input_all":[
+      {"item":"coal","count":1}
+    ]
+  },
+  "outputs": {
+    "item_output_all":[
+      {"item":"magic_io:coal_coke","count":1}
+    ]
+  },
+  "processing_time": 100
+}

@@ -13,6 +13,7 @@ import cn.yhzcake.magicio.block.inventory.SlotPartition;
 import cn.yhzcake.magicio.block.inventory.SlotZone;
 import cn.yhzcake.magicio.io.ModIOTypes;
 import cn.yhzcake.magicio.utils.ElementTypes;
+import net.minecraft.core.Direction;
 import net.minecraft.core.Holder.Reference;
 import net.minecraft.resources.Identifier;
 import net.neoforged.bus.api.IEventBus;
@@ -22,6 +23,9 @@ public class ZhenTypes {
     public static final DeferredRegister<ZhenType> ZHEN_TYPES = DeferredRegister.create(ZhenType.ZHEN_TYPE_REGISTRY_KEY, MagicIO.MOD_ID);
     public static Supplier<ZhenType> SMALL_SIFT_ZHEN;
     public static Supplier<ZhenType> SMALL_DEW_ZHEN;
+    public static Supplier<ZhenType> SMALL_BREATH_ZHEN;
+    public static Supplier<ZhenType> SMALL_ESSENCE_ZHEN;
+
     public static Supplier<ZhenType> GRID_CELL;
 
     public static Set<Integer> range(int start, int end) {
@@ -60,6 +64,72 @@ public class ZhenTypes {
                             SmallDewMethod m = new SmallDewMethod(ctx.level(), ctx.pos(), ctx.state(), ctx.blockEntity());
                             m.small_dew_tick();
                         }, 1000));
+
+        SMALL_BREATH_ZHEN = ZHEN_TYPES.register("small_breath_zhen",
+                () -> new ZhenType(ElementTypes.WIND.get(), "magic_io:small_breath_zhen",
+                        SlotPartition.of(
+                            Map.of(
+                                ModIOTypes.ITEM.get(), Map.of(
+                                    SlotZone.ITEM_INPUT_ALL, range(0, 0),
+                                    SlotZone.ITEM_OUTPUT_ALL, range(1, 1)
+                                )
+                            )
+                        ),
+                        0,
+                        Map.of(
+                            Direction.UP, Map.of(
+                                ModIOTypes.ITEM.get(), Set.of(SlotZone.ITEM_INPUT_ALL.getName(), SlotZone.ITEM_OUTPUT_ALL.getName())
+                            ),
+                            Direction.DOWN, Map.of(
+                                ModIOTypes.ITEM.get(), Set.of(SlotZone.ITEM_INPUT_ALL.getName(), SlotZone.ITEM_OUTPUT_ALL.getName())
+                            ),
+                            Direction.EAST, Map.of(
+                                ModIOTypes.ITEM.get(), Set.of(SlotZone.ITEM_INPUT_ALL.getName(), SlotZone.ITEM_OUTPUT_ALL.getName())
+                            ),
+                            Direction.WEST, Map.of(
+                                ModIOTypes.ITEM.get(), Set.of(SlotZone.ITEM_INPUT_ALL.getName(), SlotZone.ITEM_OUTPUT_ALL.getName())
+                            ),
+                            Direction.NORTH, Map.of(
+                                ModIOTypes.ITEM.get(), Set.of(SlotZone.ITEM_INPUT_ALL.getName(), SlotZone.ITEM_OUTPUT_ALL.getName())
+                            ),
+                            Direction.SOUTH, Map.of(
+                                ModIOTypes.ITEM.get(), Set.of(SlotZone.ITEM_INPUT_ALL.getName(), SlotZone.ITEM_OUTPUT_ALL.getName())
+                            )
+                        )));
+
+        SMALL_ESSENCE_ZHEN = ZHEN_TYPES.register("small_essence_zhen",
+                () -> new ZhenType(ElementTypes.WIND.get(), "magic_io:small_essence_zhen",
+                        SlotPartition.of(
+                            Map.of(
+                                ModIOTypes.ITEM.get(), Map.of(
+                                    SlotZone.ITEM_INPUT_ALL, range(0, 0),
+                                    SlotZone.ITEM_OUTPUT_ALL, range(1, 1)
+                                )
+                            )
+                        ),
+                        0, 
+                        Map.of(
+                            Direction.UP, Map.of(
+                                ModIOTypes.ITEM.get(), Set.of(SlotZone.ITEM_INPUT_ALL.getName(), SlotZone.ITEM_OUTPUT_ALL.getName())
+                            ),
+                            Direction.DOWN, Map.of(
+                                ModIOTypes.ITEM.get(), Set.of(SlotZone.ITEM_INPUT_ALL.getName(), SlotZone.ITEM_OUTPUT_ALL.getName())
+                            ),
+                            Direction.EAST, Map.of(
+                                ModIOTypes.ITEM.get(), Set.of(SlotZone.ITEM_INPUT_ALL.getName(), SlotZone.ITEM_OUTPUT_ALL.getName())
+                            ),
+                            Direction.WEST, Map.of(
+                                ModIOTypes.ITEM.get(), Set.of(SlotZone.ITEM_INPUT_ALL.getName(), SlotZone.ITEM_OUTPUT_ALL.getName())
+                            ),
+                            Direction.NORTH, Map.of(
+                                ModIOTypes.ITEM.get(), Set.of(SlotZone.ITEM_INPUT_ALL.getName(), SlotZone.ITEM_OUTPUT_ALL.getName())
+                            ),
+                            Direction.SOUTH, Map.of(
+                                ModIOTypes.ITEM.get(), Set.of(SlotZone.ITEM_INPUT_ALL.getName(), SlotZone.ITEM_OUTPUT_ALL.getName())
+                            )
+                        )
+        ));
+
 
         // GridCell 面：0 个槽位的 ZhenType，由 GridCellSideProcessor 接管全部逻辑
         GRID_CELL = ZHEN_TYPES.register("grid_cell",
