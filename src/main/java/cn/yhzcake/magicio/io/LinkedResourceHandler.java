@@ -7,6 +7,7 @@ import java.util.TreeSet;
 import net.minecraft.core.NonNullList;
 import net.neoforged.neoforge.transfer.ResourceHandler;
 import net.neoforged.neoforge.transfer.resource.Resource;
+import net.neoforged.neoforge.transfer.transaction.SnapshotJournal;
 import net.neoforged.neoforge.transfer.transaction.TransactionContext;
 
 /**
@@ -18,7 +19,7 @@ import net.neoforged.neoforge.transfer.transaction.TransactionContext;
  * @param <S> 栈/罐存储类型（ItemStack / FluidStack）
  * @param <T> 资源类型（ItemResource / FluidResource）
  */
-public abstract class LinkedResourceHandler<S, T extends Resource> implements ResourceHandler<T> {
+public abstract class LinkedResourceHandler<S, T extends Resource> extends SnapshotJournal<NonNullList<S>> implements ResourceHandler<T> {
 
     protected final NonNullList<S> stacks;
     protected final int[] allSlots;
@@ -60,6 +61,9 @@ public abstract class LinkedResourceHandler<S, T extends Resource> implements Re
     protected abstract long capacity(int slot, T resource);
 
     protected abstract S emptyInstance();
+
+    /** 创建当前栈/罐的独立副本，供 {@link SnapshotJournal} 事务快照使用。 */
+    protected abstract S copyStack(S stack);
 
     private int realSlot(int handlerSlot) {
         return allSlots[handlerSlot];
@@ -113,11 +117,12 @@ public abstract class LinkedResourceHandler<S, T extends Resource> implements Re
         if (insertable <= 0) return 0;
 
         if (isEmpty(existing)) {
+            updateSnapshots(ctx);
             stacks.set(idx, toStack(resource, insertable));
         } else {
+            updateSnapshots(ctx);
             stacks.set(idx, setAmount(existing, current + insertable));
         }
-        onChange.run();
         return insertable;
     }
 
@@ -134,8 +139,33 @@ public abstract class LinkedResourceHandler<S, T extends Resource> implements Re
         int extractable = Math.min(amount, getAmount(existing));
         if (extractable <= 0) return 0;
 
+        updateSnapshots(ctx);
         int remaining = getAmount(existing) - extractable;
         stacks.set(idx, remaining > 0 ? setAmount(existing, remaining) : emptyInstance());
         return extractable;
+    }
+
+    // ===== SnapshotJournal 事务支持 =====
+
+    @Override
+    protected NonNullList<S> createSnapshot() {
+        NonNullList<S> copy = NonNullList.withSize(stacks.size(), emptyInstance());
+        for (int i = 0; i < stacks.size(); i++) {
+            S stack = stacks.get(i);
+            copy.set(i, isEmpty(stack) ? emptyInstance() : copyStack(stack));
+        }
+        return copy;
+    }
+
+    @Override
+    protected void revertToSnapshot(NonNullList<S> snapshot) {
+        for (int i = 0; i < stacks.size(); i++) {
+            stacks.set(i, snapshot.get(i));
+        }
+    }
+
+    @Override
+    protected void onRootCommit(NonNullList<S> originalState) {
+        onChange.run();
     }
 }
