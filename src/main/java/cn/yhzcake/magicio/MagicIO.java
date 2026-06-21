@@ -16,9 +16,6 @@ import cn.yhzcake.magicio.block.zhen.ZhenType;
 import cn.yhzcake.magicio.block.zhen.ZhenTypes;
 import cn.yhzcake.magicio.block.zhenbus.ModZhenBusBlocks;
 import cn.yhzcake.magicio.block.gridcell.CellAction;
-import cn.yhzcake.magicio.block.gridcell.ModCellActions;
-import cn.yhzcake.magicio.block.gridcell.GridParseRule;
-import cn.yhzcake.magicio.block.gridcell.ModGridParseRules;
 import cn.yhzcake.magicio.config.Config;
 import cn.yhzcake.magicio.io.AbstractSideProcessor;
 import cn.yhzcake.magicio.io.EnergyIOComponent;
@@ -59,8 +56,8 @@ import net.neoforged.bus.api.IEventBus;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.common.Mod;
 import net.neoforged.fml.loading.FMLEnvironment;
-import net.neoforged.api.distmarker.Dist;
 import net.neoforged.fml.config.ModConfig;
+import net.neoforged.api.distmarker.Dist;
 import net.neoforged.fml.event.lifecycle.FMLCommonSetupEvent;
 import net.neoforged.neoforge.common.NeoForge;
 import net.neoforged.neoforge.event.AddServerReloadListenersEvent;
@@ -73,7 +70,6 @@ import net.neoforged.neoforge.registries.DeferredRegister;
 import net.neoforged.neoforge.capabilities.BlockCapability;
 import net.neoforged.neoforge.capabilities.Capabilities;
 import net.neoforged.neoforge.capabilities.RegisterCapabilitiesEvent;
-import net.neoforged.neoforge.transfer.fluid.FluidStacksResourceHandler;
 
 @Mod(MagicIO.MOD_ID)
 public class MagicIO {
@@ -107,8 +103,7 @@ public class MagicIO {
             }).build());
 
     public MagicIO(IEventBus modEventBus, net.neoforged.fml.ModContainer modContainer) {
-        modEventBus.addListener(this::commonSetup);
-
+        // ===== 先注册所有 DeferredRegister 条目（填充条目列表）=====
         ModDataComponents.register(modEventBus);
         modEventBus.register(ElementType.class);
         ElementTypes.register(modEventBus);
@@ -116,20 +111,26 @@ public class MagicIO {
         ZhenTypes.register(modEventBus);
         modEventBus.register(IOType.class);
         ModIOTypes.register(modEventBus);
-        modEventBus.register(CellAction.class);
-        ModCellActions.register(modEventBus);
-        modEventBus.register(GridParseRule.class);
-        ModGridParseRules.register(modEventBus);
-        ModBlocks.registerZhenBlocks(BLOCKS);
-        ModBlocks.registerZhenBlockItems(ITEMS);
-        BLOCKS.register(modEventBus);
-        ITEMS.register(modEventBus);
+        ModRecipeManager.register(modEventBus);
+
+        // ===== 需要依赖上述条目列表才能注册的方块/物品 =====
+        ModBlocks.registerZhenBlocks(MagicIO.BLOCKS);
+        ModBlocks.registerZhenBlockItems(MagicIO.ITEMS);
+
+        MagicIO.BLOCKS.register(modEventBus);
+        MagicIO.ITEMS.register(modEventBus);
+
+        // ZhenBus 有自己的 BLOCKS / BLOCK_ENTITIES 注册表
         ModZhenBusBlocks.BLOCKS.register(modEventBus);
         ModZhenBusBlocks.BLOCK_ENTITIES.register(modEventBus);
+
+        // ===== 其余 DeferredRegister 挂载 =====
+        modEventBus.register(CellAction.class);
         ModBlockEntities.BLOCK_ENTITIES.register(modEventBus);
         ModItems.register(modEventBus);
-        ModRecipeManager.register(modEventBus);
         CREATIVE_MODE_TABS.register(modEventBus);
+
+        modEventBus.addListener(this::commonSetup);
 
         NeoForge.EVENT_BUS.register(this);
 
@@ -140,13 +141,46 @@ public class MagicIO {
     }
 
     private void registerCapabilities(RegisterCapabilitiesEvent event) {
+        // ZhenBlock ITEM — 按方向区分输入/输出槽位，防止外部系统将物品塞入输出槽或从输入槽抽取
+        event.registerBlockEntity(
+            Capabilities.Item.BLOCK,
+             ModBlockEntities.ZHEN_BLOCK.get(), 
+            (be, direction) -> {
+                if (direction == null) return null;
+                AbstractZhenBlockEntity azbe = (AbstractZhenBlockEntity) be;
+                Set<Integer> insertSlots = azbe.getInsertSlots(direction);
+                Set<Integer> extractSlots = azbe.getExtractSlots(direction);
+                if (insertSlots.isEmpty() && extractSlots.isEmpty()) return null;
+                ItemIOComponent itemIO = azbe.getItemIOComponent();
+                LinkedItemHandler handler = new LinkedItemHandler(
+                        itemIO.getItems(), insertSlots, extractSlots);
+                handler.setOnChange(() -> {
+                    itemIO.notifyChanged();
+                    azbe.setChanged();
+                });
+                return handler;
+            }
+        );
+        // ZhenBlock FLUID — 按方向区分输入/输出罐位
         event.registerBlockEntity(
                 Capabilities.Fluid.BLOCK,
                 ModBlockEntities.ZHEN_BLOCK.get(),
                 (be, direction) -> {
-                    Integer capacity = ((AbstractZhenBlockEntity) be).getFluidTankCapacity();
+                    if (direction == null) return null;
+                    AbstractZhenBlockEntity azbe = (AbstractZhenBlockEntity) be;
+                    Integer capacity = azbe.getFluidTankCapacity();
                     if (capacity == null) return null;
-                    return new FluidStacksResourceHandler(((AbstractZhenBlockEntity) be).getFluidTanks(), capacity);
+                    Set<Integer> insertSlots = azbe.getInsertFluidSlots(direction);
+                    Set<Integer> extractSlots = azbe.getExtractFluidSlots(direction);
+                    if (insertSlots.isEmpty() && extractSlots.isEmpty()) return null;
+                    FluidIOComponent fluidIO = azbe.getFluidIOComponent();
+                    LinkedFluidHandler handler = new LinkedFluidHandler(
+                            fluidIO.getTanks(), capacity, insertSlots, extractSlots);
+                    handler.setOnChange(() -> {
+                        fluidIO.notifyChanged();
+                        azbe.setChanged();
+                    });
+                    return handler;
                 }
         );
         event.registerBlockEntity(
@@ -159,7 +193,7 @@ public class MagicIO {
                 }
         );
 
-        // ZhenBus ITEM（内联注册以接入变更通知链）
+        // ZhenBus ITEM（内联注册以接入变更通知链，并按方向+区域过滤槽位）
         event.registerBlockEntity(
                 Capabilities.Item.BLOCK,
                 ModZhenBusBlocks.ZHEN_BUS_BE.get(),
@@ -173,10 +207,15 @@ public class MagicIO {
                     if (slots == null || slots.isEmpty()) return null;
                     Object raw = processor.getIOProcessor().get(ModIOTypes.ITEM.get());
                     if (!(raw instanceof ItemIOComponent itemIO)) return null;
-                    // 管道只能向输入槽插入、从输出槽提取
                     AbstractSideProcessor asp = (AbstractSideProcessor) processor;
+                    // 只暴露该面允许的输入/输出槽位
+                    Set<Integer> insertSlots = new java.util.HashSet<>(slots);
+                    insertSlots.retainAll(asp.getInputItemSlots());
+                    Set<Integer> extractSlots = new java.util.HashSet<>(slots);
+                    extractSlots.retainAll(asp.getOutputItemSlots());
+                    if (insertSlots.isEmpty() && extractSlots.isEmpty()) return null;
                     LinkedItemHandler handler = new LinkedItemHandler(itemIO.getItems(),
-                            asp.getInputItemSlots(), asp.getOutputItemSlots());
+                            insertSlots, extractSlots);
                     handler.setOnChange(() -> {
                         itemIO.notifyChanged();
                         be.setChanged();
@@ -199,11 +238,16 @@ public class MagicIO {
                     Object raw = processor.getIOProcessor().get(ModIOTypes.FLUID.get());
                     if (!(raw instanceof FluidIOComponent fluidIO)) return null;
                     AbstractSideProcessor asp = (AbstractSideProcessor) processor;
+                    // 只暴露该面允许的输入/输出罐位
+                    Set<Integer> insertSlots = new java.util.HashSet<>(slots);
+                    insertSlots.retainAll(asp.getFluidInputSlots());
+                    Set<Integer> extractSlots = new java.util.HashSet<>(slots);
+                    extractSlots.retainAll(asp.getFluidOutputSlots());
+                    if (insertSlots.isEmpty() && extractSlots.isEmpty()) return null;
                     LinkedFluidHandler handler = new LinkedFluidHandler(
                             fluidIO.getTanks(),
                             fluidIO.getTankCapacity() != null ? fluidIO.getTankCapacity() : 0,
-                            asp.getFluidSlots(),    // 输入和输出都可以
-                            asp.getFluidSlots());    // 流体目前不区分输入/输出罐位
+                            insertSlots, extractSlots);
                     handler.setOnChange(() -> {
                         fluidIO.notifyChanged();
                         be.setChanged();

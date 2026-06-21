@@ -4,13 +4,16 @@ import org.jspecify.annotations.Nullable;
 
 import com.mojang.serialization.MapCodec;
 
-import cn.yhzcake.magicio.MagicIO;
 import cn.yhzcake.magicio.block.gridcell.CellAction;
 import cn.yhzcake.magicio.block.gridcell.GridCellSideProcessor;
 import cn.yhzcake.magicio.block.gridcell.GridCellStorage;
+import cn.yhzcake.magicio.block.zhen.ZhenBlock;
+import cn.yhzcake.magicio.block.zhen.ZhenType;
 import cn.yhzcake.magicio.block.zhen.ZhenTypes;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
+import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.resources.Identifier;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResult;
 import net.minecraft.world.entity.Entity;
@@ -155,12 +158,20 @@ public class ZhenBusBlock extends BaseEntityBlock {
             return InteractionResult.SUCCESS;
         }
 
-        // 原有逻辑：安装处理器（用 EXAMPLE_ITEM）
-        if (!stack.is(MagicIO.EXAMPLE_ITEM.get())) return InteractionResult.PASS;
-        be.addProcessor(ZhenTypes.SMALL_DEW_ZHEN.get(), face, player);
-        be.markForUpdate();
-        level.invalidateCapabilities(pos);
-        return InteractionResult.SUCCESS;
+        // 主手持 ZhenBlock 物品 → 替换底面处理器为该阵类型
+        Block carriedBlock = Block.byItem(stack.getItem());
+        if (carriedBlock instanceof ZhenBlock) {
+            Identifier blockId = BuiltInRegistries.BLOCK.getKey(carriedBlock);
+            ZhenType type = ZhenTypes.getType(blockId);
+            if (type != null) {
+                be.addProcessor(type, Direction.DOWN, player);
+                be.markForUpdate();
+                level.invalidateCapabilities(pos);
+                return InteractionResult.SUCCESS;
+            }
+        }
+
+        return InteractionResult.PASS;
     }
 
     @Override

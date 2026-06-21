@@ -101,6 +101,14 @@ public abstract class AbstractZhenBlockEntity extends BaseContainerBlockEntity i
         return ioProcessor;
     }
 
+    public ItemIOComponent getItemIOComponent() {
+        return (ItemIOComponent) (IOComponent<?, ?>) ioProcessor.get(ModIOTypes.ITEM.get());
+    }
+
+    public FluidIOComponent getFluidIOComponent() {
+        return fluidIOComponent;
+    }
+
     // ===== 容器基础方法 =====
     @Override
     protected NonNullList<ItemStack> getItems() {
@@ -141,8 +149,10 @@ public abstract class AbstractZhenBlockEntity extends BaseContainerBlockEntity i
             faceAccessController.setSlotsForFace(direction, ModIOTypes.ITEM.get(), partition.getSlots(ModIOTypes.ITEM.get(), SlotZone.ITEM_INPUT_ALL));
             faceAccessController.setZoneForFace(direction, SlotZone.ITEM_INPUT_ALL.getName());
         }
-        faceAccessController.setSlotsForFace(Direction.UP, ModIOTypes.FLUID.get(), partition.getSlots(ModIOTypes.FLUID.get(), SlotZone.FLUID_ALL));
-        faceAccessController.setSlotsForFace(Direction.DOWN, ModIOTypes.FLUID.get(), partition.getSlots(ModIOTypes.FLUID.get(), SlotZone.FLUID_ALL));
+        faceAccessController.setSlotsForFace(Direction.UP, ModIOTypes.FLUID.get(), partition.getSlots(ModIOTypes.FLUID.get(), SlotZone.FLUID_INPUT_ALL));
+        faceAccessController.setZoneForFace(Direction.UP, SlotZone.FLUID_INPUT_ALL.getName());
+        faceAccessController.setSlotsForFace(Direction.DOWN, ModIOTypes.FLUID.get(), partition.getSlots(ModIOTypes.FLUID.get(), SlotZone.FLUID_OUTPUT_ALL));
+        faceAccessController.setZoneForFace(Direction.DOWN, SlotZone.FLUID_OUTPUT_ALL.getName());
         if (energyCapacity != null) {
             for (Direction direction : Direction.values()) {
                 faceAccessController.setSlotsForFace(direction, ModIOTypes.ENERGY.get(), partition.getSlots(ModIOTypes.ENERGY.get(), SlotZone.ENERGY_INPUT_ALL));
@@ -170,6 +180,42 @@ public abstract class AbstractZhenBlockEntity extends BaseContainerBlockEntity i
 
     public boolean isOutput(int slot) {
         return partition.getSlots(ModIOTypes.ITEM.get(), SlotZone.ITEM_OUTPUT_ALL).contains(slot);
+    }
+
+    /** 该方向允许外部输入（插入）的槽位 = 面访问 ∩ 输入区 */
+    public Set<Integer> getInsertSlots(Direction direction) {
+        Set<Integer> faceSlots = getIOFaceSlots(direction, ModIOTypes.ITEM.get());
+        Set<Integer> inputSlots = partition.getSlots(ModIOTypes.ITEM.get(), SlotZone.ITEM_INPUT_ALL);
+        Set<Integer> result = new java.util.HashSet<>(faceSlots);
+        result.retainAll(inputSlots);
+        return result;
+    }
+
+    /** 该方向允许外部输出（提取）的槽位 = 面访问 ∩ 输出区 */
+    public Set<Integer> getExtractSlots(Direction direction) {
+        Set<Integer> faceSlots = getIOFaceSlots(direction, ModIOTypes.ITEM.get());
+        Set<Integer> outputSlots = partition.getSlots(ModIOTypes.ITEM.get(), SlotZone.ITEM_OUTPUT_ALL);
+        Set<Integer> result = new java.util.HashSet<>(faceSlots);
+        result.retainAll(outputSlots);
+        return result;
+    }
+
+    /** 该方向允许外部插入流体的罐位 = 面访问 ∩ 流体输入区 */
+    public Set<Integer> getInsertFluidSlots(Direction direction) {
+        Set<Integer> faceSlots = getIOFaceSlots(direction, ModIOTypes.FLUID.get());
+        Set<Integer> inputSlots = partition.getSlots(ModIOTypes.FLUID.get(), SlotZone.FLUID_INPUT_ALL);
+        Set<Integer> result = new java.util.HashSet<>(faceSlots);
+        result.retainAll(inputSlots);
+        return result;
+    }
+
+    /** 该方向允许外部提取流体的罐位 = 面访问 ∩ 流体输出区 */
+    public Set<Integer> getExtractFluidSlots(Direction direction) {
+        Set<Integer> faceSlots = getIOFaceSlots(direction, ModIOTypes.FLUID.get());
+        Set<Integer> outputSlots = partition.getSlots(ModIOTypes.FLUID.get(), SlotZone.FLUID_OUTPUT_ALL);
+        Set<Integer> result = new java.util.HashSet<>(faceSlots);
+        result.retainAll(outputSlots);
+        return result;
     }
 
     @Override

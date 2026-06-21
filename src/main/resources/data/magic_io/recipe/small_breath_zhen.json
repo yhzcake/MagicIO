@@ -1,0 +1,10 @@
+{
+    "type": "magic_io:zhen_block",
+    "zhen_type": "magic_io:small_breath_zhen",
+    "processing_time": 100,
+    "outputs": {
+        "item_output_all": [
+            {"item": "minecraft:wind_charge","count": 1}
+        ]
+    }
+}

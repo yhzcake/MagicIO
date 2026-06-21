@@ -61,6 +61,8 @@ public abstract class AbstractSideProcessor implements SideProcessor {
     private Set<Integer> outputItemSlots = Set.of();
     private Set<Integer> inputItemSlots = Set.of();
     private Set<Integer> fluidSlots = Set.of();
+    private Set<Integer> fluidInputSlots = Set.of();
+    private Set<Integer> fluidOutputSlots = Set.of();
 
     public Set<Integer> getInputItemSlots() {
         return inputItemSlots;
@@ -72,6 +74,14 @@ public abstract class AbstractSideProcessor implements SideProcessor {
 
     public Set<Integer> getFluidSlots() {
         return fluidSlots;
+    }
+
+    public Set<Integer> getFluidInputSlots() {
+        return fluidInputSlots;
+    }
+
+    public Set<Integer> getFluidOutputSlots() {
+        return fluidOutputSlots;
     }
 
     public AbstractSideProcessor(Direction side, ZhenType zhenType, BlockPos pos, Level level) {
@@ -111,7 +121,11 @@ public abstract class AbstractSideProcessor implements SideProcessor {
     private void initSlotCache() {
         inputItemSlots = Set.copyOf(partition.getSlots(ModIOTypes.ITEM.get(), SlotZone.ITEM_INPUT_ALL));
         outputItemSlots = Set.copyOf(partition.getSlots(ModIOTypes.ITEM.get(), SlotZone.ITEM_OUTPUT_ALL));
-        fluidSlots = Set.copyOf(partition.getSlots(ModIOTypes.FLUID.get(), SlotZone.FLUID_ALL));
+        fluidInputSlots = Set.copyOf(partition.getSlots(ModIOTypes.FLUID.get(), SlotZone.FLUID_INPUT_ALL));
+        fluidOutputSlots = Set.copyOf(partition.getSlots(ModIOTypes.FLUID.get(), SlotZone.FLUID_OUTPUT_ALL));
+        Set<Integer> combined = new java.util.HashSet<>(fluidInputSlots);
+        combined.addAll(fluidOutputSlots);
+        fluidSlots = Set.copyOf(combined);
     }
 
     private void initFaceAccess() {

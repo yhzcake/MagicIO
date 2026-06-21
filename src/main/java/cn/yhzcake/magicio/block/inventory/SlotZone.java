@@ -6,7 +6,8 @@ public final class SlotZone {
     public static final SlotZone ITEM_INPUT_ALL = new SlotZone("item_input_all");
     public static final SlotZone ITEM_OUTPUT_ALL = new SlotZone("item_output_all");
     public static final SlotZone DROP_OUTPUT = new SlotZone("drop_output");
-    public static final SlotZone FLUID_ALL = new SlotZone("fluid_all");
+    public static final SlotZone FLUID_INPUT_ALL = new SlotZone("fluid_input_all");
+    public static final SlotZone FLUID_OUTPUT_ALL = new SlotZone("fluid_output_all");
     public static final SlotZone ENERGY_INPUT_ALL = new SlotZone("fe_input_all");
     public static final SlotZone ENERGY_OUTPUT_ALL = new SlotZone("fe_output_all");
 

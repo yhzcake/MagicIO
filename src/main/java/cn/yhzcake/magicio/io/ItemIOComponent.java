@@ -8,15 +8,24 @@ import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.crafting.Ingredient;
 import net.minecraft.world.level.storage.ValueInput;
 import net.minecraft.world.level.storage.ValueOutput;
+import net.neoforged.neoforge.transfer.ResourceHandler;
+import net.neoforged.neoforge.transfer.item.ItemResource;
 
 public class ItemIOComponent implements IOComponent<Ingredient, ItemStack> {
     private final NonNullList<ItemStack> items;
     private final SlotPartition partition;
+    private final ResourceHandler<ItemResource> handler;
     private Runnable onChange = () -> {};
 
     public ItemIOComponent(NonNullList<ItemStack> items, SlotPartition partition) {
         this.items = items;
         this.partition = partition;
+        var allSlots = partition.getAllSlots(ModIOTypes.ITEM.get());
+        this.handler = new LinkedItemHandler(items, allSlots, allSlots);
+    }
+
+    public ResourceHandler<ItemResource> getHandler() {
+        return handler;
     }
 
     public NonNullList<ItemStack> getItems() {
@@ -36,6 +45,9 @@ public class ItemIOComponent implements IOComponent<Ingredient, ItemStack> {
     @Override
     public void setChangeCallback(Runnable onChanged) {
         this.onChange = onChanged;
+        if (handler instanceof LinkedItemHandler lh) {
+            lh.setOnChange(onChanged);
+        }
     }
 
     public void notifyChanged() {

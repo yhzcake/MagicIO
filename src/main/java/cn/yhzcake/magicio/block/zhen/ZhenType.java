@@ -86,6 +86,10 @@ public class ZhenType {
         this(elementType, type, partition, level, null, null, null);
     }
 
+    public ZhenType(ElementType elementType, String type, SlotPartition partition, int level, Map<Direction, Map<IOType, Set<String>>> faceZoneAccess) {
+        this(elementType, type, partition, level, null, null,null, faceZoneAccess, Map.of());
+    }
+
     private static Map<Direction, Map<IOType, Set<Integer>>> buildFaceAccess(
             SlotPartition partition, Map<Direction, Map<IOType, Set<String>>> zoneAccess) {
         if (zoneAccess == null || zoneAccess.isEmpty()) return Map.of();
@@ -138,11 +142,11 @@ public class ZhenType {
     }
 
     public int getFluidInput() {
-        return partition.getSlots(ModIOTypes.FLUID.get(), SlotZone.FLUID_ALL).size();
+        return partition.getSlots(ModIOTypes.FLUID.get(), SlotZone.FLUID_INPUT_ALL).size();
     }
 
     public int getFluidOutput() {
-        return partition.getSlots(ModIOTypes.FLUID.get(), SlotZone.FLUID_ALL).size();
+        return partition.getSlots(ModIOTypes.FLUID.get(), SlotZone.FLUID_OUTPUT_ALL).size();
     }
 
     public int getLevel() {
