@@ -32,6 +32,7 @@ import cn.yhzcake.magicio.item.crafting.ModRecipeManager;
 import cn.yhzcake.magicio.item.crafting.ZhenRecipe;
 import cn.yhzcake.magicio.item.crafting.ZhenRecipeLoader;
 import cn.yhzcake.magicio.item.crafting.ZhenRecipeManager;
+import cn.yhzcake.magicio.item.crafting.ForgeRecipeBridge;
 import cn.yhzcake.magicio.utils.ElementType;
 import cn.yhzcake.magicio.utils.ElementTypes;
 import net.minecraft.resources.Identifier;
@@ -70,6 +71,7 @@ import net.neoforged.neoforge.registries.DeferredRegister;
 import net.neoforged.neoforge.capabilities.BlockCapability;
 import net.neoforged.neoforge.capabilities.Capabilities;
 import net.neoforged.neoforge.capabilities.RegisterCapabilitiesEvent;
+import net.neoforged.neoforge.server.ServerLifecycleHooks;
 
 @Mod(MagicIO.MOD_ID)
 public class MagicIO {
@@ -108,9 +110,11 @@ public class MagicIO {
         modEventBus.register(ElementType.class);
         ElementTypes.register(modEventBus);
         modEventBus.register(ZhenType.class);
-        ZhenTypes.register(modEventBus);
         modEventBus.register(IOType.class);
         ModIOTypes.register(modEventBus);
+
+        // ===== 依赖 IOType/ModIOTypes 的注册 =====
+        ZhenTypes.register(modEventBus);
         ModRecipeManager.register(modEventBus);
 
         // ===== 需要依赖上述条目列表才能注册的方块/物品 =====
@@ -317,7 +321,9 @@ public class MagicIO {
                 LOGGER.info("跳过客户端配方加载，等待服务端启动时加载");
                 return;
             }
-            loadAllRecipes(resourceManager, null);
+            // /reload 时从 ServerLifecycleHooks 获取服务器实例
+            MinecraftServer server = ServerLifecycleHooks.getCurrentServer();
+            loadAllRecipes(resourceManager, server);
         }
     }
 
@@ -348,6 +354,9 @@ public class MagicIO {
                 LOGGER.error("加载配方时出错 {}", resourceLocation, e);
             }
         }
+
+        // 运行时桥接：将原版熔炉配方转换为 forge_zhen 配方
+        ForgeRecipeBridge.injectFurnaceRecipes(server);
 
         LOGGER.info("配方加载完成，共加载 {} 个配方", ZhenRecipeManager.getInstance().getRecipeCount());
     }

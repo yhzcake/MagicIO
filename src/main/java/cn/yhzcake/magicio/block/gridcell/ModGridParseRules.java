@@ -3,7 +3,7 @@ package cn.yhzcake.magicio.block.gridcell;
 import java.util.function.Supplier;
 
 import cn.yhzcake.magicio.MagicIO;
-import cn.yhzcake.magicio.block.zhen.ZhenTypes;
+import cn.yhzcake.magicio.block.zhen.UnstableZhenTypes;
 import net.neoforged.bus.api.IEventBus;
 import net.neoforged.neoforge.registries.DeferredRegister;
 
@@ -20,11 +20,11 @@ public class ModGridParseRules {
      * 示例规则：使用 GridPattern 匹配。
      * 配置语义：dir=1（左上角起始），sharp 模式，4×4 全为 FIRE。
      */
-    public static Supplier<GridParseRule> SMALL_SIFT_ZHEN;
+    public static Supplier<GridParseRule> UNSTABLE_SIFT_ZHEN;
 
     public static void register(IEventBus eventBus) {
-        SMALL_SIFT_ZHEN = GRID_PARSE_RULES.register("small_sift_zhen", () -> new GridParseRule(
-                () -> ZhenTypes.SMALL_SIFT_ZHEN.get(),
+        UNSTABLE_SIFT_ZHEN = GRID_PARSE_RULES.register("unstable_sift_zhen", () -> new GridParseRule(
+                () -> UnstableZhenTypes.UNSTABLE_SIEVE_ZHEN.get(),
                 // 使用 GridPattern 构建匹配器
                 GridPattern.builder(5, GridPattern.MatchType.SHARP, new String[][]{
                         {"a", "a"},
@@ -32,7 +32,7 @@ public class ModGridParseRules {
                 }).tag("a", ModCellActions.EARTH).buildMatcher(),
                 // handler：占位，后续实现具体逻辑
                 ctx -> {
-                    MagicIO.LOGGER.info("GridParseRule SMALL_SIFT_ZHEN matched at {}", ctx.pos());
+                    MagicIO.LOGGER.info("GridParseRule UNSTABLE_SIFT_ZHEN matched at {}", ctx.pos());
                 }
         ));
 

@@ -1,0 +1,11 @@
+{
+  "type": "magic_io:zhen_block",
+  "zhen_type": "magic_io:stable_voltaic_zhen",
+  "inputs": {
+    "item_input_all": [{"item": "minecraft:water_bucket", "count": 1}]
+  },
+  "outputs": {
+    "fluid_output_all": [{"fluid": "minecraft:water", "amount": 100}]
+  },
+  "processing_time": 200
+}

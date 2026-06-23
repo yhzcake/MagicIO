@@ -1,0 +1,10 @@
+{
+  "type": "magic_io:zhen_block",
+  "zhen_type": "magic_io:unstable_dew_zhen",
+  "processing_time": 10,
+  "fluid_outputs": {
+    "fluid_output_all": [
+      {"fluid": "minecraft:water", "amount": 20}
+    ]
+  }
+}

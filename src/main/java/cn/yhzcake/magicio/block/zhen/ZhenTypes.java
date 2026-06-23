@@ -7,24 +7,20 @@ import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
 import cn.yhzcake.magicio.MagicIO;
-import cn.yhzcake.magicio.block.entity.method.SmallDewMethod;
-import cn.yhzcake.magicio.block.entity.method.SmallSiftMethod;
 import cn.yhzcake.magicio.block.inventory.SlotPartition;
 import cn.yhzcake.magicio.block.inventory.SlotZone;
+import cn.yhzcake.magicio.io.IOType;
 import cn.yhzcake.magicio.io.ModIOTypes;
+import cn.yhzcake.magicio.utils.ElementType;
 import cn.yhzcake.magicio.utils.ElementTypes;
-import net.minecraft.core.Holder.Reference;
 import net.minecraft.core.Direction;
+import net.minecraft.core.Holder.Reference;
 import net.minecraft.resources.Identifier;
 import net.neoforged.bus.api.IEventBus;
 import net.neoforged.neoforge.registries.DeferredRegister;
 
 public class ZhenTypes {
     public static final DeferredRegister<ZhenType> ZHEN_TYPES = DeferredRegister.create(ZhenType.ZHEN_TYPE_REGISTRY_KEY, MagicIO.MOD_ID);
-    public static Supplier<ZhenType> SMALL_SIFT_ZHEN;
-    public static Supplier<ZhenType> SMALL_DEW_ZHEN;
-    public static Supplier<ZhenType> SMALL_BREATH_ZHEN;
-    public static Supplier<ZhenType> SMALL_ESSENCE_ZHEN;
 
     public static Supplier<ZhenType> GRID_CELL;
 
@@ -32,103 +28,48 @@ public class ZhenTypes {
         return IntStream.range(start, end + 1).boxed().collect(Collectors.toSet());
     }
 
+    // ===== 共享的懒加载辅助方法（仅在 lambda 内部调用，此时注册表已就绪）=====
+
+    /** 默认面访问：6 个方向全部暴露 ITEM 输入+输出 */
+    static Map<Direction, Map<IOType, Set<String>>> defaultAccess() {
+        var slots = Set.of(SlotZone.ITEM_INPUT_ALL.getName(), SlotZone.ITEM_OUTPUT_ALL.getName());
+        return Map.of(
+            Direction.UP, Map.of(ModIOTypes.ITEM.get(), slots),
+            Direction.DOWN, Map.of(ModIOTypes.ITEM.get(), slots),
+            Direction.EAST, Map.of(ModIOTypes.ITEM.get(), slots),
+            Direction.WEST, Map.of(ModIOTypes.ITEM.get(), slots),
+            Direction.NORTH, Map.of(ModIOTypes.ITEM.get(), slots),
+            Direction.SOUTH, Map.of(ModIOTypes.ITEM.get(), slots)
+        );
+    }
+
+    /** 默认物品槽位：槽 0 输入，槽 1 输出 */
+    static Map<SlotZone, Set<Integer>> defaultItemSlots() {
+        return Map.of(
+            SlotZone.ITEM_INPUT_ALL, range(0, 0),
+            SlotZone.ITEM_OUTPUT_ALL, range(1, 1)
+        );
+    }
+
+    // ===== 便利注册方法 =====
+
+    /** 最简：纯物品，默认槽位 + 默认面访问，无 tick */
+    public static Supplier<ZhenType> registerSimple(String id, Supplier<ElementType> element, int level) {
+        return ZHEN_TYPES.register(id, () -> new ZhenType(
+                element.get(), "magic_io:" + id,
+                SlotPartition.of(ModIOTypes.ITEM.get(), defaultItemSlots()),
+                level, defaultAccess()));
+    }
+
+    // ===== 注册入口 =====
+
     public static void register(IEventBus eventBus) {
-        SMALL_SIFT_ZHEN = ZHEN_TYPES.register("small_sift_zhen",
-                () -> new ZhenType(ElementTypes.EARTH.get(), "magic_io:small_sift_zhen",
-                        SlotPartition.of(ModIOTypes.ITEM.get(), Map.of(
-                                SlotZone.ITEM_INPUT_ALL, range(0, 0),
-                                SlotZone.ITEM_OUTPUT_ALL, range(1, 1)
-                        )),
-                        0,
-                        (ctx) -> () -> {
-                            SmallSiftMethod m = new SmallSiftMethod(ctx.level(), ctx.pos(), ctx.state(), ctx.blockEntity());
-                            m.small_sift_tick();
-                        }));
-        
-        SMALL_DEW_ZHEN = ZHEN_TYPES.register("small_dew_zhen",
-                () -> new ZhenType(ElementTypes.WATER.get(), "magic_io:small_dew_zhen",
-                        SlotPartition.of(
-                            Map.of(
-                                ModIOTypes.ITEM.get(),Map.of(
-                                    // for bucket
-                                    SlotZone.ITEM_INPUT_ALL, range(0, 0),
-                                    SlotZone.ITEM_OUTPUT_ALL, range(1, 1)
-                                ),
-                                ModIOTypes.FLUID.get(), Map.of(
-                                    SlotZone.FLUID_OUTPUT_ALL, range(0, 0)
-                                )
-                            )
-                        ),
-                        0,
-                        (ctx) -> () -> {
-                            SmallDewMethod m = new SmallDewMethod(ctx.level(), ctx.pos(), ctx.state(), ctx.blockEntity());
-                            m.small_dew_tick();
-                        }, 1000));
-
-        SMALL_BREATH_ZHEN = ZHEN_TYPES.register("small_breath_zhen",
-                () -> new ZhenType(ElementTypes.WIND.get(), "magic_io:small_breath_zhen",
-                        SlotPartition.of(
-                            Map.of(
-                                ModIOTypes.ITEM.get(), Map.of(
-                                    SlotZone.ITEM_INPUT_ALL, range(0, 0),
-                                    SlotZone.ITEM_OUTPUT_ALL, range(1, 1)
-                                )
-                            )
-                        ),
-                        0,
-                        Map.of(
-                            Direction.UP, Map.of(
-                                ModIOTypes.ITEM.get(), Set.of(SlotZone.ITEM_INPUT_ALL.getName(), SlotZone.ITEM_OUTPUT_ALL.getName())
-                            ),
-                            Direction.DOWN, Map.of(
-                                ModIOTypes.ITEM.get(), Set.of(SlotZone.ITEM_INPUT_ALL.getName(), SlotZone.ITEM_OUTPUT_ALL.getName())
-                            ),
-                            Direction.EAST, Map.of(
-                                ModIOTypes.ITEM.get(), Set.of(SlotZone.ITEM_INPUT_ALL.getName(), SlotZone.ITEM_OUTPUT_ALL.getName())
-                            ),
-                            Direction.WEST, Map.of(
-                                ModIOTypes.ITEM.get(), Set.of(SlotZone.ITEM_INPUT_ALL.getName(), SlotZone.ITEM_OUTPUT_ALL.getName())
-                            ),
-                            Direction.NORTH, Map.of(
-                                ModIOTypes.ITEM.get(), Set.of(SlotZone.ITEM_INPUT_ALL.getName(), SlotZone.ITEM_OUTPUT_ALL.getName())
-                            ),
-                            Direction.SOUTH, Map.of(
-                                ModIOTypes.ITEM.get(), Set.of(SlotZone.ITEM_INPUT_ALL.getName(), SlotZone.ITEM_OUTPUT_ALL.getName())
-                            )
-                        )));
-
-        SMALL_ESSENCE_ZHEN = ZHEN_TYPES.register("small_essence_zhen",
-                () -> new ZhenType(ElementTypes.WIND.get(), "magic_io:small_essence_zhen",
-                        SlotPartition.of(
-                            Map.of(
-                                ModIOTypes.ITEM.get(), Map.of(
-                                    SlotZone.ITEM_INPUT_ALL, range(0, 0),
-                                    SlotZone.ITEM_OUTPUT_ALL, range(1, 1)
-                                )
-                            )
-                        ),
-                        0, 
-                        Map.of(
-                            Direction.UP, Map.of(
-                                ModIOTypes.ITEM.get(), Set.of(SlotZone.ITEM_INPUT_ALL.getName(), SlotZone.ITEM_OUTPUT_ALL.getName())
-                            ),
-                            Direction.DOWN, Map.of(
-                                ModIOTypes.ITEM.get(), Set.of(SlotZone.ITEM_INPUT_ALL.getName(), SlotZone.ITEM_OUTPUT_ALL.getName())
-                            ),
-                            Direction.EAST, Map.of(
-                                ModIOTypes.ITEM.get(), Set.of(SlotZone.ITEM_INPUT_ALL.getName(), SlotZone.ITEM_OUTPUT_ALL.getName())
-                            ),
-                            Direction.WEST, Map.of(
-                                ModIOTypes.ITEM.get(), Set.of(SlotZone.ITEM_INPUT_ALL.getName(), SlotZone.ITEM_OUTPUT_ALL.getName())
-                            ),
-                            Direction.NORTH, Map.of(
-                                ModIOTypes.ITEM.get(), Set.of(SlotZone.ITEM_INPUT_ALL.getName(), SlotZone.ITEM_OUTPUT_ALL.getName())
-                            ),
-                            Direction.SOUTH, Map.of(
-                                ModIOTypes.ITEM.get(), Set.of(SlotZone.ITEM_INPUT_ALL.getName(), SlotZone.ITEM_OUTPUT_ALL.getName())
-                            )
-                        )
-        ));
+        UnstableZhenTypes.register(eventBus);
+        StableZhenTypes.register(eventBus);
+        SturdyZhenTypes.register(eventBus);
+        AbundantZhenTypes.register(eventBus);
+        ArchaicZhenTypes.register(eventBus);
+        PrimevalZhenTypes.register(eventBus);
 
         // GridCell 面：0 个槽位的 ZhenType，由 GridCellSideProcessor 接管全部逻辑
         GRID_CELL = ZHEN_TYPES.register("grid_cell",
@@ -138,53 +79,33 @@ public class ZhenTypes {
         ZHEN_TYPES.register(eventBus);
     }
 
+    // ===== 查询 =====
+
     public static ZhenType getType(String name) {
-        if (name == null || name.isEmpty()) {
-            return SMALL_SIFT_ZHEN.get();
-        }
-
-        if (ZhenType.ZHEN_TYPES == null) {
-            return SMALL_SIFT_ZHEN.get();
-        }
-
+        if (name == null || name.isEmpty()) return getFallback();
+        if (ZhenType.ZHEN_TYPES == null) return getFallback();
         try {
-            // name 可能已是完整 id（如 "magic_io:small_dew_zhen"），
-            // 也可能是纯路径（如 "small_dew_zhen"），使用 Identifier.parse 正确处理
             Identifier id = name.contains(":") ? Identifier.parse(name) : Identifier.fromNamespaceAndPath(MagicIO.MOD_ID, name);
-            return ZhenType.ZHEN_TYPES.get(id)
-                    .map(Reference::value).orElse(SMALL_SIFT_ZHEN.get());
+            return ZhenType.ZHEN_TYPES.get(id).map(Reference::value).orElse(getFallback());
         } catch (Exception e) {
-            return SMALL_SIFT_ZHEN.get();
+            return getFallback();
         }
     }
 
     public static ZhenType getType(Identifier location) {
-        if (location == null) {
-            return SMALL_SIFT_ZHEN.get();
-        }
-
-        if (ZhenType.ZHEN_TYPES == null) {
-            return SMALL_SIFT_ZHEN.get();
-        }
-
+        if (location == null || ZhenType.ZHEN_TYPES == null) return getFallback();
         try {
-            return ZhenType.ZHEN_TYPES.get(location)
-                    .map(Reference::value).orElse(SMALL_SIFT_ZHEN.get());
+            return ZhenType.ZHEN_TYPES.get(location).map(Reference::value).orElse(getFallback());
         } catch (Exception e) {
-            return SMALL_SIFT_ZHEN.get();
+            return getFallback();
         }
     }
 
-    public static ZhenType getType() {
-        if (ZhenType.ZHEN_TYPES == null) {
-            return SMALL_SIFT_ZHEN.get();
-        }
+    public static ZhenType getType() { return getFallback(); }
 
-        try {
-            return ZhenType.ZHEN_TYPES.get(Identifier.fromNamespaceAndPath(MagicIO.MOD_ID, "small_sift_zhen"))
-                    .map(Reference::value).orElse(SMALL_SIFT_ZHEN.get());
-        } catch (Exception e) {
-            return SMALL_SIFT_ZHEN.get();
-        }
+    private static ZhenType getFallback() {
+        if (UnstableZhenTypes.UNSTABLE_SIEVE_ZHEN != null) return UnstableZhenTypes.UNSTABLE_SIEVE_ZHEN.get();
+        if (GRID_CELL != null) return GRID_CELL.get();
+        return null;
     }
 }

@@ -1,0 +1,11 @@
+{
+  "type": "magic_io:zhen_block",
+  "zhen_type": "magic_io:archaic_transmute_zhen",
+  "inputs": {
+    "item_input_all": [{"item": "minecraft:iron_ingot", "count": 1}]
+  },
+  "outputs": {
+    "item_output_all": [{"item": "minecraft:gold_ingot", "count": 1}]
+  },
+  "processing_time": 300
+}

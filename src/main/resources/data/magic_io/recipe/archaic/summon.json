@@ -1,0 +1,11 @@
+{
+  "type": "magic_io:zhen_block",
+  "zhen_type": "magic_io:archaic_summon_zhen",
+  "inputs": {
+    "item_input_all": [{"item": "minecraft:rotten_flesh", "count": 32}]
+  },
+  "outputs": {
+    "item_output_all": [{"item": "minecraft:spawner", "count": 1}]
+  },
+  "processing_time": 600
+}

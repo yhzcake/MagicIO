@@ -1,0 +1,11 @@
+{
+  "type": "magic_io:zhen_block",
+  "zhen_type": "magic_io:sturdy_ferment_zhen",
+  "inputs": {
+    "item_input_all": [{"item": "minecraft:sugar", "count": 1}]
+  },
+  "outputs": {
+    "item_output_all": [{"item": "minecraft:honey_bottle", "count": 1}]
+  },
+  "processing_time": 200
+}

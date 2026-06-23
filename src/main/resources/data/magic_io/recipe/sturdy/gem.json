@@ -1,0 +1,11 @@
+{
+  "type": "magic_io:zhen_block",
+  "zhen_type": "magic_io:sturdy_gem_zhen",
+  "inputs": {
+    "item_input_all": [{"item": "minecraft:diamond", "count": 1}]
+  },
+  "outputs": {
+    "item_output_all": [{"item": "minecraft:emerald", "count": 2}]
+  },
+  "processing_time": 200
+}

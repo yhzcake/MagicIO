@@ -1,0 +1,18 @@
+{
+  "type": "magic_io:zhen_block",
+  "zhen_type": "magic_io:unstable_sieve_zhen",
+  "inputs": {
+    "item_input_all": [
+      {"item": "minecraft:coarse_dirt", "count": 1}
+    ]
+  },
+  "outputs": {
+    "item_output_all": [
+      {"item": "minecraft:dirt", "count": 1}
+    ],
+    "drop_output": [
+      {"loot_table": "magic_io:sift_metal_drop"}
+    ]
+  },
+  "processing_time": 100
+}

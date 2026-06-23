@@ -1,0 +1,11 @@
+{
+  "type": "magic_io:zhen_block",
+  "zhen_type": "magic_io:stable_carve_zhen",
+  "inputs": {
+    "item_input_all": [{"item": "minecraft:oak_log", "count": 1}]
+  },
+  "outputs": {
+    "item_output_all": [{"item": "minecraft:stick", "count": 8}]
+  },
+  "processing_time": 80
+}

@@ -1,0 +1,11 @@
+{
+  "type": "magic_io:zhen_block",
+  "zhen_type": "magic_io:archaic_fate_zhen",
+  "inputs": {
+    "item_input_all": [{"item": "minecraft:diamond", "count": 1}]
+  },
+  "outputs": {
+    "drop_output": [{"loot_table": "magic_io:random_treasure"}]
+  },
+  "processing_time": 100
+}

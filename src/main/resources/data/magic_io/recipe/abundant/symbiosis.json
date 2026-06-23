@@ -1,0 +1,11 @@
+{
+  "type": "magic_io:zhen_block",
+  "zhen_type": "magic_io:abundant_symbiosis_zhen",
+  "inputs": {
+    "item_input_all": [{"item": "minecraft:bone_meal", "count": 1}]
+  },
+  "outputs": {
+    "item_output_all": [{"item": "minecraft:bone", "count": 3}, {"item": "minecraft:oak_sapling", "count": 2}]
+  },
+  "processing_time": 120
+}
