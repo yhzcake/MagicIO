@@ -155,6 +155,10 @@ public class ZhenRecipe implements Recipe<ZhenRecipeInput> {
     }
 
     public ItemStack assemble(ZhenRecipeInput input, HolderLookup.Provider registries) {
+        var outputs = getFixedOutputs();
+        for (ItemStack stack : outputs) {
+            if (!stack.isEmpty()) return stack.copy();
+        }
         return ItemStack.EMPTY;
     }
 
@@ -163,6 +167,10 @@ public class ZhenRecipe implements Recipe<ZhenRecipeInput> {
     }
 
     public ItemStack getResultItem(HolderLookup.Provider registries) {
+        var outputs = getFixedOutputs();
+        for (ItemStack stack : outputs) {
+            if (!stack.isEmpty()) return stack.copy();
+        }
         return ItemStack.EMPTY;
     }
 

@@ -73,6 +73,13 @@ public class ZhenRecipeManager {
         return recipesByBaseName.getOrDefault(baseName(zhenType), List.of());
     }
 
+    /** 获取所有已注册的配方 */
+    public List<ZhenRecipe> getAllRecipes() {
+        return recipesByBaseName.values().stream()
+                .flatMap(List::stream)
+                .toList();
+    }
+
     /** 查找匹配的配方 */
     public ZhenRecipe findRecipe(String zhenType, NonNullList<ItemStack> allItems, SlotPartition partition, Level level) {
         List<ZhenRecipe> candidates = recipesByBaseName.get(baseName(zhenType));

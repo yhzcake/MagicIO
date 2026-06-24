@@ -7,8 +7,7 @@
         {"type": "minecraft:tag", "name": "c:nuggets", "weight": 18, "expand": true},
         {"type": "minecraft:tag", "name": "c:plates",  "weight": 1, "expand": true},
         {"type": "minecraft:tag", "name": "c:shards",  "weight": 4, "expand": true},
-        {"type": "minecraft:tag", "name": "c:crystal",  "weight": 5, "expand": true},
-        {"type": "minecraft:tag", "name": "c:clumps",  "weight": 3, "expand": true}
+        {"type": "minecraft:tag", "name": "c:crystal",  "weight": 5, "expand": true}
       ]
     },
     {
@@ -17,8 +16,7 @@
         {"type": "minecraft:tag", "name": "c:nuggets", "weight": 18, "expand": true},
         {"type": "minecraft:tag", "name": "c:plates",  "weight": 1, "expand": true},
         {"type": "minecraft:tag", "name": "c:shards",  "weight": 4, "expand": true},
-        {"type": "minecraft:tag", "name": "c:crystal",  "weight": 5, "expand": true},
-        {"type": "minecraft:tag", "name": "c:clumps",  "weight": 3, "expand": true}
+        {"type": "minecraft:tag", "name": "c:crystal",  "weight": 5, "expand": true}
       ]
     },
     {
@@ -27,8 +25,7 @@
         {"type": "minecraft:tag", "name": "c:nuggets", "weight": 18, "expand": true},
         {"type": "minecraft:tag", "name": "c:plates",  "weight": 1, "expand": true},
         {"type": "minecraft:tag", "name": "c:shards",  "weight": 4, "expand": true},
-        {"type": "minecraft:tag", "name": "c:crystal",  "weight": 5, "expand": true},
-        {"type": "minecraft:tag", "name": "c:clumps",  "weight": 3, "expand": true}
+        {"type": "minecraft:tag", "name": "c:crystal",  "weight": 5, "expand": true}
       ]
     }
   ]
