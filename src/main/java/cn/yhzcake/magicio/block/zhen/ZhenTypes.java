@@ -11,7 +11,7 @@ import cn.yhzcake.magicio.block.inventory.SlotPartition;
 import cn.yhzcake.magicio.block.inventory.SlotZone;
 import cn.yhzcake.magicio.io.IOType;
 import cn.yhzcake.magicio.io.ModIOTypes;
-import cn.yhzcake.magicio.utils.ElementType;
+import cn.yhzcake.magicio.item.crafting.RecipeModifiers;
 import cn.yhzcake.magicio.utils.ElementTypes;
 import net.minecraft.core.Direction;
 import net.minecraft.core.Holder.Reference;
@@ -30,16 +30,17 @@ public class ZhenTypes {
 
     // ===== 共享的懒加载辅助方法（仅在 lambda 内部调用，此时注册表已就绪）=====
 
-    /** 默认面访问：6 个方向全部暴露 ITEM 输入+输出 */
+    /** 默认面访问：6 个方向全部暴露 ITEM 输入+输出 和 FLUID 输入+输出 */
     static Map<Direction, Map<IOType, Set<String>>> defaultAccess() {
-        var slots = Set.of(SlotZone.ITEM_INPUT_ALL.getName(), SlotZone.ITEM_OUTPUT_ALL.getName());
+        var itemSlots = Set.of(SlotZone.ITEM_INPUT_ALL.getName(), SlotZone.ITEM_OUTPUT_ALL.getName());
+        var fluidSlots = Set.of(SlotZone.FLUID_INPUT_ALL.getName(), SlotZone.FLUID_OUTPUT_ALL.getName());
         return Map.of(
-            Direction.UP, Map.of(ModIOTypes.ITEM.get(), slots),
-            Direction.DOWN, Map.of(ModIOTypes.ITEM.get(), slots),
-            Direction.EAST, Map.of(ModIOTypes.ITEM.get(), slots),
-            Direction.WEST, Map.of(ModIOTypes.ITEM.get(), slots),
-            Direction.NORTH, Map.of(ModIOTypes.ITEM.get(), slots),
-            Direction.SOUTH, Map.of(ModIOTypes.ITEM.get(), slots)
+            Direction.UP, Map.of(ModIOTypes.ITEM.get(), itemSlots, ModIOTypes.FLUID.get(), fluidSlots),
+            Direction.DOWN, Map.of(ModIOTypes.ITEM.get(), itemSlots, ModIOTypes.FLUID.get(), fluidSlots),
+            Direction.EAST, Map.of(ModIOTypes.ITEM.get(), itemSlots, ModIOTypes.FLUID.get(), fluidSlots),
+            Direction.WEST, Map.of(ModIOTypes.ITEM.get(), itemSlots, ModIOTypes.FLUID.get(), fluidSlots),
+            Direction.NORTH, Map.of(ModIOTypes.ITEM.get(), itemSlots, ModIOTypes.FLUID.get(), fluidSlots),
+            Direction.SOUTH, Map.of(ModIOTypes.ITEM.get(), itemSlots, ModIOTypes.FLUID.get(), fluidSlots)
         );
     }
 
@@ -51,25 +52,14 @@ public class ZhenTypes {
         );
     }
 
-    // ===== 便利注册方法 =====
-
-    /** 最简：纯物品，默认槽位 + 默认面访问，无 tick */
-    public static Supplier<ZhenType> registerSimple(String id, Supplier<ElementType> element, int level) {
-        return ZHEN_TYPES.register(id, () -> new ZhenType(
-                element.get(), "magic_io:" + id,
-                SlotPartition.of(ModIOTypes.ITEM.get(), defaultItemSlots()),
-                level, defaultAccess()));
-    }
-
     // ===== 注册入口 =====
 
     public static void register(IEventBus eventBus) {
-        UnstableZhenTypes.register(eventBus);
-        StableZhenTypes.register(eventBus);
-        SturdyZhenTypes.register(eventBus);
-        AbundantZhenTypes.register(eventBus);
-        ArchaicZhenTypes.register(eventBus);
-        PrimevalZhenTypes.register(eventBus);
+        // 等级系统注册到 RecipeModifiers
+        RecipeModifiers.register(ZhenLevel.UNSTABLE);
+
+        // 由 ZhenFunctions 集中注册所有功能
+        ZhenFunctions.register(eventBus);
 
         // GridCell 面：0 个槽位的 ZhenType，由 GridCellSideProcessor 接管全部逻辑
         GRID_CELL = ZHEN_TYPES.register("grid_cell",
@@ -104,8 +94,17 @@ public class ZhenTypes {
     public static ZhenType getType() { return getFallback(); }
 
     private static ZhenType getFallback() {
-        if (UnstableZhenTypes.UNSTABLE_SIEVE_ZHEN != null) return UnstableZhenTypes.UNSTABLE_SIEVE_ZHEN.get();
+        var unstableSieve = findUnstableSieve();
+        if (unstableSieve != null) return unstableSieve;
         if (GRID_CELL != null) return GRID_CELL.get();
+        return null;
+    }
+
+    private static ZhenType findUnstableSieve() {
+        var sieveId = Identifier.fromNamespaceAndPath(MagicIO.MOD_ID, "unstable_sieve_zhen");
+        if (ZhenType.ZHEN_TYPES != null) {
+            return ZhenType.ZHEN_TYPES.get(sieveId).map(Reference::value).orElse(null);
+        }
         return null;
     }
 }

@@ -7,8 +7,8 @@ import com.mojang.serialization.MapCodec;
 import cn.yhzcake.magicio.block.gridcell.CellAction;
 import cn.yhzcake.magicio.block.gridcell.GridCellSideProcessor;
 import cn.yhzcake.magicio.block.gridcell.GridCellStorage;
-import cn.yhzcake.magicio.block.zhen.UnstableZhenTypes;
 import cn.yhzcake.magicio.block.zhen.ZhenBlock;
+import cn.yhzcake.magicio.block.zhen.ZhenFunctions;
 import cn.yhzcake.magicio.block.zhen.ZhenType;
 import cn.yhzcake.magicio.block.zhen.ZhenTypes;
 import net.minecraft.core.BlockPos;
@@ -96,7 +96,7 @@ public class ZhenBusBlock extends BaseEntityBlock {
         super.setPlacedBy(level, pos, state, placer, stack);
         if (level.isClientSide()) return;
         if (level.getBlockEntity(pos) instanceof ZhenBusBlockEntity be) {
-            be.addProcessor(UnstableZhenTypes.UNSTABLE_SIEVE_ZHEN.get(), Direction.DOWN, null);
+            be.addProcessor(ZhenFunctions.UNSTABLE_SIEVE_ZHEN.get(), Direction.DOWN, null);
         }
     }
 

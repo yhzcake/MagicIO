@@ -6,6 +6,7 @@ import java.util.Set;
 import cn.yhzcake.magicio.MagicIO;
 import cn.yhzcake.magicio.block.inventory.SlotPartition;
 import cn.yhzcake.magicio.block.inventory.SlotZone;
+import cn.yhzcake.magicio.block.zhen.ZhenLevel;
 import cn.yhzcake.magicio.io.FluidIOComponent;
 import cn.yhzcake.magicio.io.IOProcessor;
 import cn.yhzcake.magicio.io.ModIOTypes;
@@ -33,6 +34,10 @@ public class RecipeProcessor {
         public ZhenRecipe currentRecipe = null;
         public int recipeCheckTimer = 0;
         public ZhenRecipe lastValidRecipe = null;
+        /** 实际加工时长（由配方基础时长 × 等级/插件倍率计算得出） */
+        public int effectiveProcessingTime = 0;
+        /** 产出倍率（由等级/插件倍率累计得出） */
+        public double outputMultiplier = 1.0;
     }
 
     /**
@@ -105,7 +110,7 @@ public class RecipeProcessor {
                 needSync = true;
 
                 // 配方完成
-                if (state.processTime >= state.currentRecipe.getProcessingTime()) {
+                if (state.processTime >= state.effectiveProcessingTime) {
                     MagicIO.LOGGER.trace("[{}] processTick: recipe {} complete! attempting to produce output...", pos.toShortString(), state.currentRecipe.getZhenTypeStr());
                     if (tryCompleteRecipe(level, pos, state, partition, items, tanks, ioProcessor, zoneFaceAccess, centerDrop, onChanged)) {
                         MagicIO.LOGGER.trace("[{}] processTick: recipe {} output produced successfully", pos.toShortString(), state.currentRecipe.getZhenTypeStr());
@@ -139,6 +144,7 @@ public class RecipeProcessor {
         if (state.lastValidRecipe.matches(items, partition, level)
                 && state.lastValidRecipe.matchesFluid(tanks, partition)) {
             state.currentRecipe = state.lastValidRecipe;
+            computeEffectiveValues(state, zhenType);
             state.processTime = 0;
             state.inputsChanged = false;
             return true;
@@ -154,10 +160,49 @@ public class RecipeProcessor {
                 zhenType, items, partition, level);
         if (newRecipe != null && newRecipe.matchesFluid(tanks, partition)) {
             state.currentRecipe = newRecipe;
+            computeEffectiveValues(state, zhenType);
             state.lastValidRecipe = newRecipe;
             state.processTime = 0;
             state.inputsChanged = false;
         }
+    }
+
+    /**
+     * 根据配方所在等级和实际阵等级的差值，计算有效加工时长和产出倍率。
+     * 同时叠加 RecipeModifiers 的贡献。
+     */
+    private static void computeEffectiveValues(State state, String zhenType) {
+        if (state.currentRecipe == null) {
+            state.effectiveProcessingTime = 0;
+            state.outputMultiplier = 1.0;
+            return;
+        }
+
+        // 提取配方等级（配方自身的 zhen_type_id 中的等级）
+        String recipePath = state.currentRecipe.getZhenTypeId().getPath();
+        ZhenLevel recipeLevel = ZhenLevel.fromFullId(recipePath);
+        // 提取实际阵等级
+        String zhenPath = zhenType.contains(":") ? zhenType.substring(zhenType.indexOf(':') + 1) : zhenType;
+        ZhenLevel actualLevel = ZhenLevel.fromFullId(zhenPath);
+
+        if (recipeLevel == null || actualLevel == null) {
+            // 无法识别等级，使用原始值
+            state.effectiveProcessingTime = state.currentRecipe.getProcessingTime();
+            state.outputMultiplier = 1.0;
+            return;
+        }
+
+        double speedMult = ZhenLevel.totalSpeedMultiplier(recipeLevel.level(), actualLevel.level());
+        double outputMult = ZhenLevel.totalOutputMultiplier(recipeLevel.level(), actualLevel.level());
+
+        // 叠加 RecipeModifiers
+        String typeIdStr = "magic_io:" + zhenPath;
+        speedMult *= RecipeModifiers.getTimeMultiplier(typeIdStr, state.currentRecipe);
+        outputMult *= RecipeModifiers.getOutputMultiplier(typeIdStr, state.currentRecipe);
+
+        state.effectiveProcessingTime = (int) Math.round(state.currentRecipe.getProcessingTime() * speedMult);
+        if (state.effectiveProcessingTime < 1) state.effectiveProcessingTime = 1;
+        state.outputMultiplier = outputMult;
     }
 
     // ============ 阶段二配方完成 ============
@@ -185,6 +230,19 @@ public class RecipeProcessor {
 
         MagicIO.LOGGER.trace("[{}] tryCompleteRecipe: rolling outputs for recipe {}...", pos.toShortString(), recipe.getZhenTypeStr());
         Map<String, NonNullList<ItemStack>> zoneOutputs = recipe.rollOutput(serverLevel);
+        // 应用产出倍率
+        if (state.outputMultiplier != 1.0) {
+            for (NonNullList<ItemStack> stacks : zoneOutputs.values()) {
+                for (int i = 0; i < stacks.size(); i++) {
+                    ItemStack stack = stacks.get(i);
+                    if (!stack.isEmpty()) {
+                        int newCount = (int) Math.round(stack.getCount() * state.outputMultiplier);
+                        if (newCount < 1) newCount = 1;
+                        stack.setCount(newCount);
+                    }
+                }
+            }
+        }
         Map<String, NonNullList<FluidStack>> fluidOutputs = recipe.rollFluidOutput();
         MagicIO.LOGGER.trace("[{}] tryCompleteRecipe: zoneOutputs={}, fluidOutputs={}", pos.toShortString(), zoneOutputs, fluidOutputs);
 

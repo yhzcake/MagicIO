@@ -3,7 +3,7 @@ package cn.yhzcake.magicio.block.gridcell;
 import java.util.function.Supplier;
 
 import cn.yhzcake.magicio.MagicIO;
-import cn.yhzcake.magicio.block.zhen.UnstableZhenTypes;
+import cn.yhzcake.magicio.block.zhen.ZhenFunctions;
 import net.neoforged.bus.api.IEventBus;
 import net.neoforged.neoforge.registries.DeferredRegister;
 
@@ -24,7 +24,7 @@ public class ModGridParseRules {
 
     public static void register(IEventBus eventBus) {
         UNSTABLE_SIFT_ZHEN = GRID_PARSE_RULES.register("unstable_sift_zhen", () -> new GridParseRule(
-                () -> UnstableZhenTypes.UNSTABLE_SIEVE_ZHEN.get(),
+                () -> ZhenFunctions.UNSTABLE_SIEVE_ZHEN.get(),
                 // 使用 GridPattern 构建匹配器
                 GridPattern.builder(5, GridPattern.MatchType.SHARP, new String[][]{
                         {"a", "a"},
