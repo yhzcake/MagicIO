@@ -223,7 +223,8 @@ public class ZhenRecipeSerializer {
                             Identifier.STREAM_CODEC.encode(buf, entry.lootTableId());
                         } else {
                             buf.writeByte(0);
-                            ItemStack.STREAM_CODEC.encode(buf, entry.stack());
+                            ItemStack stack = entry.stack();
+                            ItemStack.OPTIONAL_STREAM_CODEC.encode(buf, stack != null ? stack : ItemStack.EMPTY);
                         }
                     }
                 }
@@ -275,7 +276,12 @@ public class ZhenRecipeSerializer {
                         byte entryType = buf.readByte();
                         switch (entryType) {
                             case 1 -> entries.add(OutputEntry.lootTable(Identifier.STREAM_CODEC.decode(buf)));
-                            default -> entries.add(OutputEntry.item(ItemStack.STREAM_CODEC.decode(buf)));
+                            default -> {
+                                ItemStack stack = ItemStack.OPTIONAL_STREAM_CODEC.decode(buf);
+                                if (!stack.isEmpty()) {
+                                    entries.add(OutputEntry.item(stack));
+                                }
+                            }
                         }
                     }
                     outputs.add(new RecipeOutput<>(ModIOTypes.ITEM.get(), zoneName, entries));

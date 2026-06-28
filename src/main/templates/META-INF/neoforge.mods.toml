@@ -22,5 +22,19 @@ description='''
     ordering="NONE"
     side="BOTH"
 
+[[dependencies.${mod_id}]]
+    modId="jade"
+    type="optional"
+    versionRange="[26.1.5,)"
+    ordering="NONE"
+    side="BOTH"
+
+[[dependencies.${mod_id}]]
+    modId="jei"
+    type="optional"
+    versionRange="[29.5.0.28,)"
+    ordering="NONE"
+    side="BOTH"
+
 [[mixins]]
 config="${mod_id}.mixins.json"

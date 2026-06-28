@@ -126,7 +126,13 @@ public class ZhenRecipeLoader {
                                 String item = outputObj.get("item").getAsString();
                                 int count = outputObj.has("count") ? outputObj.get("count").getAsInt() : 1;
                                 Identifier itemId = Identifier.parse(item);
-                                BuiltInRegistries.ITEM.get(itemId).ifPresent(holder -> entries.add(OutputEntry.item(new ItemStack(holder.value(), count))));
+                                BuiltInRegistries.ITEM.get(itemId).ifPresent(holder -> {
+                                    try {
+                                        entries.add(OutputEntry.item(new ItemStack(holder.value(), count)));
+                                    } catch (Exception e) {
+                                        MagicIO.LOGGER.debug("Skipping item {} - registries not ready: {}", itemId, e.getMessage());
+                                    }
+                                });
                             }
                         }
                         outputs.add(new RecipeOutput<>(ModIOTypes.ITEM.get(), entry.getKey(), entries));

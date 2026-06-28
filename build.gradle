@@ -30,6 +30,10 @@ repositories {
         name = "ModMaven"
         url = "https://modmaven.dev"
     }
+    maven {
+        name = "CurseMaven"
+        url = "https://www.cursemaven.com"
+    }
 }
 
 base {
@@ -81,6 +85,9 @@ dependencies {
     compileOnly("mezz.jei:jei-26.1.2-neoforge-api:29.5.0.28")
     // 本地调试时取消注释即可加载完整 JEI，打包前请重新注释掉
     // runtimeOnly("mezz.jei:jei-1.21.5-neoforge:21.4.0.27")
+
+    // Jade — 仅编译期依赖，运行时可选
+    compileOnly("curse.maven:jade-324717:8281991")
 }
 
 var generateModMetadata = tasks.register("generateModMetadata", ProcessResources) {

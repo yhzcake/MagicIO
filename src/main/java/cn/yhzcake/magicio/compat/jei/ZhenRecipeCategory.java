@@ -17,7 +17,6 @@ import mezz.jei.api.recipe.IFocusGroup;
 import mezz.jei.api.recipe.RecipeIngredientRole;
 import mezz.jei.api.recipe.category.IRecipeCategory;
 import mezz.jei.api.recipe.types.IRecipeType;
-import net.minecraft.ChatFormatting;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.core.NonNullList;
@@ -34,6 +33,7 @@ public class ZhenRecipeCategory implements IRecipeCategory<ZhenRecipe> {
     private static final int COLS = 9;
     private static final int SLOT = 18;
     private static final int VISIBLE_ROWS = 3;
+    private static final int FLUID_SIZE = 16;
 
     private static final int WIDTH = COLS * SLOT + 2;   // 164
     private static final int INPUT_Y = 0;
@@ -64,7 +64,8 @@ public class ZhenRecipeCategory implements IRecipeCategory<ZhenRecipe> {
 
     @Override
     public Component getTitle() {
-        return Component.translatable("jei.magic_io.category." + baseName);
+        return Component.translatable("magic_io.zhen_name_category",
+                Component.translatable("magic_io.zhen_type." + baseName));
     }
 
     @Override
@@ -101,11 +102,10 @@ public class ZhenRecipeCategory implements IRecipeCategory<ZhenRecipe> {
                 for (var fi : fluids) {
                     int amount = fi.amount();
                     for (var holder : fi.fluids()) {
-                        int a = amount;
                         builder.addSlot(RecipeIngredientRole.INPUT, cx, INPUT_Y)
-                                .add(holder.value(), amount).setStandardSlotBackground()
-                                .addRichTooltipCallback((v, t) ->
-                                        t.add(Component.literal(a + " mB").withStyle(ChatFormatting.AQUA)));
+                                .add(holder.value(), amount)
+                                .setFluidRenderer(amount, false, FLUID_SIZE, FLUID_SIZE)
+                                .setStandardSlotBackground();
                         cx += SLOT;
                     }
                 }
@@ -121,9 +121,9 @@ public class ZhenRecipeCategory implements IRecipeCategory<ZhenRecipe> {
                     FluidStack fs = fluids.get(i);
                     int amount = fs.getAmount();
                     builder.addSlot(RecipeIngredientRole.OUTPUT, rx, INPUT_Y)
-                            .add(fs.getFluid(), amount).setStandardSlotBackground()
-                            .addRichTooltipCallback((v, t) ->
-                                    t.add(Component.literal(amount + " mB").withStyle(ChatFormatting.AQUA)));
+                            .add(fs.getFluid(), amount)
+                            .setFluidRenderer(amount, false, FLUID_SIZE, FLUID_SIZE)
+                            .setStandardSlotBackground();
                     rx -= SLOT;
                 }
             }

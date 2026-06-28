@@ -4,6 +4,7 @@ import org.jspecify.annotations.Nullable;
 
 import com.mojang.serialization.MapCodec;
 
+import cn.yhzcake.magicio.MagicIO;
 import cn.yhzcake.magicio.block.gridcell.CellAction;
 import cn.yhzcake.magicio.block.gridcell.GridCellSideProcessor;
 import cn.yhzcake.magicio.block.gridcell.GridCellStorage;
@@ -14,6 +15,7 @@ import cn.yhzcake.magicio.block.zhen.ZhenTypes;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.nbt.CompoundTag;
 import net.minecraft.resources.Identifier;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResult;
@@ -35,6 +37,8 @@ import net.minecraft.world.phys.Vec3;
 import net.minecraft.world.phys.shapes.CollisionContext;
 import net.minecraft.world.phys.shapes.Shapes;
 import net.minecraft.world.phys.shapes.VoxelShape;
+import net.minecraft.core.component.DataComponents;
+import net.minecraft.world.item.component.CustomData;
 
 public class ZhenBusBlock extends BaseEntityBlock {
 
@@ -102,8 +106,11 @@ public class ZhenBusBlock extends BaseEntityBlock {
 
     @Override
     public void playerDestroy(Level level, Player player, BlockPos pos, BlockState state, @Nullable BlockEntity blockEntity, ItemStack stack) {
-        if (blockEntity instanceof ZhenBusBlockEntity host) {
-            for (ItemStack drop : host.collectDrops()) {
+        // 掉落实体方块自身
+        super.playerDestroy(level, player, pos, state, blockEntity, stack);
+        // 掉落处理器内的物品（setRemoved 不再处理掉落以规避世界重载时误掉）
+        if (!level.isClientSide() && blockEntity instanceof ZhenBusBlockEntity be) {
+            for (ItemStack drop : be.collectDrops()) {
                 Block.popResource(level, pos, drop);
             }
         }
@@ -159,13 +166,25 @@ public class ZhenBusBlock extends BaseEntityBlock {
             return InteractionResult.SUCCESS;
         }
 
-        // 主手持 ZhenBlock 物品 → 替换底面处理器为该阵类型
+        // 主手持 ZhenBlock 物品 → 在该面（或副手 example_item 指定面）安装处理器
         Block carriedBlock = Block.byItem(stack.getItem());
         if (carriedBlock instanceof ZhenBlock) {
+            // 确定目标面：副手有 example_item 且带 side NBT 时用其值，否则用 hit 面
+            Direction targetFace = face;
+            ItemStack offhand = player.getOffhandItem();
+            if (offhand.is(MagicIO.EXAMPLE_ITEM.get())) {
+                CompoundTag tag = offhand.getOrDefault(DataComponents.CUSTOM_DATA, CustomData.EMPTY).copyTag();
+                String sideName = tag.getString("side").orElse("");
+                Direction offhandDir = Direction.byName(sideName);
+                if (offhandDir != null) {
+                    targetFace = offhandDir;
+                }
+            }
+
             Identifier blockId = BuiltInRegistries.BLOCK.getKey(carriedBlock);
             ZhenType type = ZhenTypes.getType(blockId);
             if (type != null) {
-                be.addProcessor(type, Direction.DOWN, player);
+                be.addProcessor(type, targetFace, player);
                 be.markForUpdate();
                 level.invalidateCapabilities(pos);
                 return InteractionResult.SUCCESS;

@@ -38,6 +38,8 @@ public class RecipeProcessor {
         public int effectiveProcessingTime = 0;
         /** 产出倍率（由等级/插件倍率累计得出） */
         public double outputMultiplier = 1.0;
+        /** 上次检查时的输入哈希值（用于避免输入未变化时的重复扫描） */
+        public int lastInputHash = 0;
     }
 
     /**
@@ -114,11 +116,8 @@ public class RecipeProcessor {
                     MagicIO.LOGGER.trace("[{}] processTick: recipe {} complete! attempting to produce output...", pos.toShortString(), state.currentRecipe.getZhenTypeStr());
                     if (tryCompleteRecipe(level, pos, state, partition, items, tanks, ioProcessor, zoneFaceAccess, centerDrop, onChanged)) {
                         MagicIO.LOGGER.trace("[{}] processTick: recipe {} output produced successfully", pos.toShortString(), state.currentRecipe.getZhenTypeStr());
+                        // 配方成功：保持 currentRecipe，仅重置进度，继续加工（避免重新遍历配方列表）
                         state.processTime = 0;
-                        // 无输入配方的自动重检：配方完成后立即允许再次匹配
-                        boolean noInputs = state.currentRecipe.getInputs().isEmpty();
-                        state.currentRecipe = null;
-                        if (noInputs) state.inputsChanged = true;
                     } else {
                         MagicIO.LOGGER.trace("[{}] processTick: recipe {} output FAILED (output full?), backing off by {} ticks", pos.toShortString(), state.currentRecipe.getZhenTypeStr(), PROCESS_COLL_SPEED);
                         state.processTime = Math.max(0, state.processTime - PROCESS_COLL_SPEED);
@@ -133,6 +132,27 @@ public class RecipeProcessor {
         }
 
         return needSync;
+    }
+
+    /**
+     * 计算当前输入状态的哈希值。
+     * 仅基于物品 ID 和数量，不依赖 NBT（Ingredient.test 也不检查 NBT）。
+     * 用于在输入未变化时跳过完整的配方扫描。
+     */
+    private static int computeInputHash(NonNullList<ItemStack> items, NonNullList<FluidStack> tanks,
+            SlotPartition partition) {
+        int hash = 1;
+        for (int slot : partition.getAllSlots(ModIOTypes.ITEM.get())) {
+            ItemStack stack = items.get(slot);
+            hash = 31 * hash + (stack.isEmpty() ? 0 : System.identityHashCode(stack.getItem()));
+            hash = 31 * hash + (stack.isEmpty() ? 0 : stack.getCount());
+        }
+        for (int slot : partition.getAllSlots(ModIOTypes.FLUID.get())) {
+            FluidStack fluid = tanks.get(slot);
+            hash = 31 * hash + (fluid.isEmpty() ? 0 : System.identityHashCode(fluid.getFluid()));
+            hash = 31 * hash + (fluid.isEmpty() ? 0 : fluid.getAmount());
+        }
+        return hash;
     }
 
     // ============ 阶段一辅助 ============
@@ -156,6 +176,17 @@ public class RecipeProcessor {
     private static void tryFindNewRecipe(State state, String zhenType,
             NonNullList<ItemStack> items, NonNullList<FluidStack> tanks,
             SlotPartition partition, Level level) {
+        int currentHash = computeInputHash(items, tanks, partition);
+        // 输入未变化且上次缓存的配方仍然有效：直接复用，跳过线性扫描
+        if (currentHash == state.lastInputHash && state.lastValidRecipe != null
+                && state.lastValidRecipe.matchesFluid(tanks, partition)) {
+            state.currentRecipe = state.lastValidRecipe;
+            computeEffectiveValues(state, zhenType);
+            state.processTime = 0;
+            state.inputsChanged = false;
+            return;
+        }
+
         ZhenRecipe newRecipe = ZhenRecipeManager.getInstance().findRecipe(
                 zhenType, items, partition, level);
         if (newRecipe != null && newRecipe.matchesFluid(tanks, partition)) {
@@ -165,6 +196,7 @@ public class RecipeProcessor {
             state.processTime = 0;
             state.inputsChanged = false;
         }
+        state.lastInputHash = currentHash;
     }
 
     /**
@@ -268,14 +300,14 @@ public class RecipeProcessor {
             return false;
         }
         if (!canFitFluidZoneOutputs(fluidOutputs, partition, tanks, tankCapacity)) {
-            MagicIO.LOGGER.info("[{}] tryCompleteRecipe: FAILED canFitFluidZoneOutputs (tankCapacity={}, fluidOutputs={})", pos.toShortString(), tankCapacity, fluidOutputs);
+            MagicIO.LOGGER.trace("[{}] tryCompleteRecipe: FAILED canFitFluidZoneOutputs (tankCapacity={}, fluidOutputs={})", pos.toShortString(), tankCapacity, fluidOutputs);
             return false;
         }
         if (!canConsumeAllFluids(recipe, partition, tanks)) {
-            MagicIO.LOGGER.info("[{}] tryCompleteRecipe: FAILED canConsumeAllFluids", pos.toShortString());
+            MagicIO.LOGGER.trace("[{}] tryCompleteRecipe: FAILED canConsumeAllFluids", pos.toShortString());
             return false;
         }
-        MagicIO.LOGGER.info("[{}] tryCompleteRecipe: all checks passed, executing...", pos.toShortString());
+        MagicIO.LOGGER.trace("[{}] tryCompleteRecipe: all checks passed, executing...", pos.toShortString());
 
         // 执行消耗
         for (RecipeInput<?> input : recipe.getInputs()) {
@@ -310,20 +342,14 @@ public class RecipeProcessor {
                     NonNullList<FluidStack> outputFluids = fluidOutputs.get(output.zoneName());
                     if (outputFluids != null) {
                         produceFluidInZone(zone, outputFluids, partition, tanks, tankCapacity);
-                        // 验证产出
-                        for (int i = 0; i < tanks.size(); i++) {
-                            if (!tanks.get(i).isEmpty()) {
-                                MagicIO.LOGGER.info("[{}] tryCompleteRecipe: tank[{}] now has {}mb of fluid {}",
-                                    pos.toShortString(), i, tanks.get(i).getAmount(), tanks.get(i).getFluid());
-                            }
-                        }
+                        MagicIO.LOGGER.trace("[{}] tryCompleteRecipe: produced fluid in zone {}", pos.toShortString(), output.zoneName());
                     }
                 }
             }
         }
 
         if (onChanged != null) onChanged.run();
-        MagicIO.LOGGER.info("[{}] tryCompleteRecipe: SUCCESS", pos.toShortString());
+        MagicIO.LOGGER.trace("[{}] tryCompleteRecipe: SUCCESS", pos.toShortString());
         return true;
     }
 

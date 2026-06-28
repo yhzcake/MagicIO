@@ -27,7 +27,6 @@ import net.minecraft.world.ItemStackWithSlot;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.Level;
-import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.storage.TagValueInput;
@@ -55,10 +54,17 @@ public class ZhenBusBlockEntity extends BlockEntity implements ZhenBusHost {
         container.remove(d); markForUpdate(); if (container.isEmpty()) destroyBusBlock();
     }
     private void destroyBusBlock() {
+        // 物品掉落由 setRemoved() 统一处理
         if (level != null && !level.isClientSide()) {
-            for (ItemStack drop : container.collectDrops()) Block.popResource(level, worldPosition, drop);
             level.destroyBlock(worldPosition, false);
         }
+    }
+
+    @Override
+    public void setRemoved() {
+        // 不掉落物品——掉落统一由 ZhenBusBlock.playerDestroy() 处理。
+        // 重载世界时 setRemoved 会被调用但不应触发掉落，否则数据仍在 NBT 中而物品已在地面。
+        super.setRemoved();
     }
     @Override public void markForUpdate() { setChanged(); if (level != null) level.sendBlockUpdated(worldPosition, getBlockState(), getBlockState(), 3); }
     @Override public void markForSave() { setChanged(); }

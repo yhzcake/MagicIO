@@ -36,7 +36,7 @@ public class ModBlocks {
     public static void registerZhenBlockItems(DeferredRegister.Items itemRegister) {
         for (var blockEntry : ZHEN_BLOCKS.entrySet()) {
             String name = blockEntry.getKey();
-            DeferredBlock<Block> block = blockEntry.getValue();
+            var block = blockEntry.getValue();
             ZHEN_BLOCK_ITEMS.put(name, itemRegister.registerSimpleBlockItem(name, block));
         }
     }

@@ -8,6 +8,10 @@ import cn.yhzcake.magicio.block.entity.AbstractZhenBlockEntity;
 import cn.yhzcake.magicio.block.entity.ModBlockEntities;
 import cn.yhzcake.magicio.block.entity.ZhenBlockEntity;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.network.chat.Component;
+import net.minecraft.network.chat.MutableComponent;
+import net.minecraft.resources.Identifier;
 import net.minecraft.world.Container;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.player.Player;
@@ -22,9 +26,33 @@ import net.minecraft.world.level.block.state.BlockState;
 
 public class ZhenBlock extends BaseEntityBlock {
     public static final MapCodec<ZhenBlock> CODEC = simpleCodec(ZhenBlock::new);
-    
+
     public ZhenBlock(Properties properties) {
         super(properties);
+    }
+
+    @Override
+    public MutableComponent getName() {
+        Identifier id = BuiltInRegistries.BLOCK.getKey(this);
+        String path = id.getPath();
+        // 去掉 _zhen 后缀
+        if (!path.endsWith("_zhen")) {
+            return super.getName();
+        }
+        String base = path.substring(0, path.length() - "_zhen".length());
+
+        // 从等级前缀中解析
+        for (ZhenLevel level : ZhenLevel.ALL) {
+            String prefix = level.prefix();
+            if (base.startsWith(prefix)) {
+                String typeName = base.substring(prefix.length());
+                return Component.translatable("magic_io.zhen_name",
+                        Component.translatable("magic_io.level." + prefix.substring(0, prefix.length() - 1)),
+                        Component.translatable("magic_io.zhen_type." + typeName));
+            }
+        }
+
+        return super.getName();
     }
 
     @Override

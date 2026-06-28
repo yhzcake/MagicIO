@@ -49,11 +49,26 @@ public abstract class AbstractSideProcessor implements SideProcessor {
     protected int processTime = 0;
     protected boolean inputsChanged = false;
     protected @Nullable ZhenRecipe currentRecipe;
-    protected Runnable onChanged = () -> {};
+    /** 持久化的配方缓存值，避免 effectiveProcessingTime 等每 tick 丢失 */
+    private int effectiveProcessingTime = 0;
+    private double outputMultiplier = 1.0;
+    private int lastInputHash = 0;
+    protected Runnable onChanged = new Runnable() {
+        @Override
+        public void run() {
+        }
+    };
     protected final FaceAccessController faceAccessController = new FaceAccessController();
 
     private int tickInterval = 1;
     private int tickCounter = 0;
+    private static final int IDLE_TICK_INTERVAL = 20;  // 空闲时每 20 tick（1 秒）唤醒一次
+
+    /** 是否曾有过邻接 ZhenBus 的连接（用于跳过端口刷新循环） */
+    private boolean hasEverConnectedPort = false;
+    /** 空闲时端口扫描计时器（无连接时降低扫描频率） */
+    private int portScanTimer = 0;
+    private static final int PORT_SCAN_INTERVAL_IDLE = 200;  // 无连接时每 200 tick 扫描一次
 
     private final Map<String, VirtualPort> virtualPorts = new HashMap<>();
 
@@ -173,6 +188,14 @@ public abstract class AbstractSideProcessor implements SideProcessor {
         for (VirtualPort port : virtualPorts.values()) {
             port.forceScan(level, pos, currentTick);
         }
+        // 扫描后更新连接标志
+        hasEverConnectedPort = false;
+        for (VirtualPort port : virtualPorts.values()) {
+            if (port.hasDirectConnection()) {
+                hasEverConnectedPort = true;
+                break;
+            }
+        }
     }
 
     public void invalidatePorts() {
@@ -184,8 +207,26 @@ public abstract class AbstractSideProcessor implements SideProcessor {
     public void tickRefreshPorts() {
         if (level == null) return;
         long currentTick = level.getGameTime();
-        for (VirtualPort port : virtualPorts.values()) {
-            port.tickRefresh(level, pos, currentTick);
+        if (hasEverConnectedPort) {
+            // 已有连接：正常按 200 tick 间隔刷新
+            for (VirtualPort port : virtualPorts.values()) {
+                port.tickRefresh(level, pos, currentTick);
+            }
+        } else {
+            // 无连接：降低扫描频率（每 PORT_SCAN_INTERVAL_IDLE tick 一次）
+            if (portScanTimer++ >= PORT_SCAN_INTERVAL_IDLE) {
+                portScanTimer = 0;
+                for (VirtualPort port : virtualPorts.values()) {
+                    port.tickRefresh(level, pos, currentTick);
+                }
+                // 扫描后检查是否发现新连接
+                for (VirtualPort port : virtualPorts.values()) {
+                    if (port.hasDirectConnection()) {
+                        hasEverConnectedPort = true;
+                        break;
+                    }
+                }
+            }
         }
     }
 
@@ -313,10 +354,24 @@ public abstract class AbstractSideProcessor implements SideProcessor {
 
     @Override
     public void tick() {
-        if (++tickCounter % tickInterval != 0) return;
+        if (++tickCounter % tickInterval != 0) {
+            // 空闲稀释时，每 tick 检查是否变为活跃，保证唤醒延迟 ≤1 tick
+            if (tickInterval > 1 && hasWork()) {
+                tickCounter = 0;
+                tickInterval = 1;
+            } else {
+                return;
+            }
+        }
 
-        if (!hasWork() && !zhenType.hasTickFactory()) {
-            return;
+        boolean isActive = hasWork() || zhenType.hasTickFactory();
+
+        // 动态 tickInterval：活跃时每 tick 运行，空闲时稀释频率
+        if (isActive) {
+            if (tickInterval > 1) tickInterval = 1;
+        } else {
+            tickInterval = IDLE_TICK_INTERVAL;
+            return;  // 完全跳过 tick 本体
         }
 
         int tank0Before = tanks.isEmpty() ? -1 : (tanks.get(0).isEmpty() ? 0 : tanks.get(0).getAmount());
@@ -328,6 +383,10 @@ public abstract class AbstractSideProcessor implements SideProcessor {
             recipeState.processTime = this.processTime;
             recipeState.inputsChanged = this.inputsChanged;
             recipeState.currentRecipe = this.currentRecipe;
+            // 注入持久化的缓存值，避免每 tick 新建 State 导致 effectiveProcessingTime 归零
+            recipeState.effectiveProcessingTime = this.effectiveProcessingTime;
+            recipeState.outputMultiplier = this.outputMultiplier;
+            recipeState.lastInputHash = this.lastInputHash;
 
             boolean needSync = RecipeProcessor.processTick(
                     level, pos, recipeState, zhenType.getType(),
@@ -335,15 +394,15 @@ public abstract class AbstractSideProcessor implements SideProcessor {
                     true,
                     onChanged);
 
+            // 从 State 同步回 this
             this.processTime = recipeState.processTime;
             this.inputsChanged = recipeState.inputsChanged;
             this.currentRecipe = recipeState.currentRecipe;
+            this.effectiveProcessingTime = recipeState.effectiveProcessingTime;
+            this.outputMultiplier = recipeState.outputMultiplier;
+            this.lastInputHash = recipeState.lastInputHash;
 
-            boolean hasAnyConnected = false;
-            for (var port : virtualPorts.values()) {
-                if (port.hasDirectConnection()) { hasAnyConnected = true; break; }
-            }
-            if (hasAnyConnected) {
+            if (hasEverConnectedPort) {
                 pushOutputsThroughPorts();
             }
 
@@ -354,7 +413,7 @@ public abstract class AbstractSideProcessor implements SideProcessor {
 
         int tank0After = tanks.isEmpty() ? -1 : (tanks.get(0).isEmpty() ? 0 : tanks.get(0).getAmount());
         if (tank0Before != tank0After) {
-            MagicIO.LOGGER.info("[tick] {} tank[0] {}→{}", pos.toShortString(), tank0Before, tank0After);
+            MagicIO.LOGGER.trace("[tick] {} tank[0] {}→{}", pos.toShortString(), tank0Before, tank0After);
         }
 
         zhenType.execute(level, pos, level.getBlockState(pos), null);

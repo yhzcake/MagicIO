@@ -200,7 +200,7 @@ public class ZhenRecipe implements Recipe<ZhenRecipeInput> {
             if (output.type() == ModIOTypes.ITEM.get()) {
                 NonNullList<OutputEntry> entries = (NonNullList<OutputEntry>) output.specification();
                 for (OutputEntry entry : entries) {
-                    if (entry.stack() != null) {
+                    if (entry.stack() != null && !entry.stack().isEmpty()) {
                         flat.add(entry.stack());
                     }
                 }

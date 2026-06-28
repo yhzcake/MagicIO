@@ -69,9 +69,9 @@ public class LootTableParser {
                         TagKey<Item> tagKey = TagKey.create(Registries.ITEM, Identifier.parse(tagName));
                         var tag = BuiltInRegistries.ITEM.get(tagKey);
                         if (tag.isPresent()) {
-                            int count = 0;
-                            for (var h : tag.get()) count++;
-                            for (var h : tag.get()) {
+                            var holderSet = tag.get();
+                            int count = holderSet.size();
+                            for (var h : holderSet) {
                                 expanded.add(new ExpandedEntry(weight, h.value(), count));
                             }
                             totalEffectiveWeight += weight * count;
