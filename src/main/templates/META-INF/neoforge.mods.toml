@@ -25,14 +25,14 @@ description='''
 [[dependencies.${mod_id}]]
     modId="jade"
     type="optional"
-    versionRange="[26.1.5,)"
+    versionRange="[26.1.0,)"
     ordering="NONE"
     side="BOTH"
 
 [[dependencies.${mod_id}]]
     modId="jei"
     type="optional"
-    versionRange="[29.5.0.28,)"
+    versionRange="[29.5.0.0,)"
     ordering="NONE"
     side="BOTH"
 
