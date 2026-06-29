@@ -1,6 +1,7 @@
 package cn.yhzcake.magicio.network;
 
 import cn.yhzcake.magicio.MagicIO;
+import cn.yhzcake.magicio.compat.jei.MagicIOJeiPlugin;
 import cn.yhzcake.magicio.item.crafting.ZhenRecipe;
 import cn.yhzcake.magicio.item.crafting.ZhenRecipeManager;
 import cn.yhzcake.magicio.item.crafting.ZhenRecipeSerializer;
@@ -47,14 +48,16 @@ public record ZhenRecipeSyncPayload(List<ZhenRecipe> recipes) implements CustomP
         return TYPE;
     }
 
-    /** 客户端收到数据包后更新本地缓存（供游戏逻辑使用，JEI 展示已从 classpath 加载） */
+    /** 客户端收到数据包后更新缓存并动态注入 JEI */
     public static void handle(ZhenRecipeSyncPayload payload, net.neoforged.neoforge.network.handling.IPayloadContext context) {
         context.enqueueWork(() -> {
             ZhenRecipeManager.getInstance().clearRecipes();
             for (var recipe : payload.recipes) {
                 ZhenRecipeManager.getInstance().addRecipe(recipe);
             }
-            MagicIO.LOGGER.info("[Network] Received {} recipes from server, cache updated", payload.recipes.size());
+            MagicIO.LOGGER.info("[Network] Received {} recipes from server", payload.recipes.size());
+            // 动态刷新 JEI 配方显示
+            MagicIOJeiPlugin.refreshRecipes();
         });
     }
 }
