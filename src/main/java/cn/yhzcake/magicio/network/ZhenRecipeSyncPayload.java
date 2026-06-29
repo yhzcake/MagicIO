@@ -48,7 +48,7 @@ public record ZhenRecipeSyncPayload(List<ZhenRecipe> recipes) implements CustomP
         return TYPE;
     }
 
-    /** 客户端收到数据包后更新缓存并动态注入 JEI */
+    /** 客户端收到数据包后更新缓存并刷新 JEI 显示 */
     public static void handle(ZhenRecipeSyncPayload payload, net.neoforged.neoforge.network.handling.IPayloadContext context) {
         context.enqueueWork(() -> {
             ZhenRecipeManager.getInstance().clearRecipes();
@@ -56,8 +56,8 @@ public record ZhenRecipeSyncPayload(List<ZhenRecipe> recipes) implements CustomP
                 ZhenRecipeManager.getInstance().addRecipe(recipe);
             }
             MagicIO.LOGGER.info("[Network] Received {} recipes from server", payload.recipes.size());
-            // 动态刷新 JEI 配方显示
-            MagicIOJeiPlugin.refreshRecipes();
+            // 用服务端配方刷新 JEI 显示
+            MagicIOJeiPlugin.refreshFromCache();
         });
     }
 }

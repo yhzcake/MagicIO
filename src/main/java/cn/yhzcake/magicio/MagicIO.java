@@ -34,6 +34,7 @@ import cn.yhzcake.magicio.item.crafting.ZhenRecipeLoader;
 import cn.yhzcake.magicio.item.crafting.ZhenRecipeManager;
 import cn.yhzcake.magicio.utils.ElementType;
 import cn.yhzcake.magicio.utils.ElementTypes;
+import cn.yhzcake.magicio.item.crafting.ForgeRecipeBridge;
 import net.minecraft.core.Direction;
 import net.minecraft.core.component.DataComponents;
 import net.minecraft.core.registries.BuiltInRegistries;
@@ -376,6 +377,23 @@ public class MagicIO {
     public void onServerStarting(ServerStartingEvent event) {
         var server = event.getServer();
         loadRecipesToManager(server.getResourceManager(), server);
+        // 向已连接的玩家广播（ServerStartingEvent 时可能已有玩家）
+        syncRecipesToAll();
+    }
+
+    @SubscribeEvent
+    public void onPlayerLogin(net.neoforged.neoforge.event.entity.player.PlayerEvent.PlayerLoggedInEvent event) {
+        var entity = event.getEntity();
+        if (!(entity instanceof net.minecraft.server.level.ServerPlayer player)) return;
+        // 延迟到主线程执行，确保线程安全
+        var server = player.level().getServer();
+        server.execute(() -> {
+            var recipes = ZhenRecipeManager.getInstance().getAllRecipes();
+            if (recipes.isEmpty()) return;
+            var payload = new cn.yhzcake.magicio.network.ZhenRecipeSyncPayload(recipes);
+            net.neoforged.neoforge.network.PacketDistributor.sendToPlayer(player, payload);
+            LOGGER.info("Synced {} recipes to player {}", recipes.size(), player.getName().getString());
+        });
     }
 
     @SubscribeEvent
@@ -395,6 +413,7 @@ public class MagicIO {
             MinecraftServer server = net.neoforged.neoforge.server.ServerLifecycleHooks.getCurrentServer();
             if (server == null || !server.isRunning()) return;
             loadRecipesToManager(resourceManager, server);
+            syncRecipesToAll();
         }
     }
 
@@ -414,6 +433,16 @@ public class MagicIO {
                 LOGGER.error("Error loading recipe {}: {}", entry.getKey(), e.getMessage());
             }
         }
+        // 注入熔炉配方桥接
+        ForgeRecipeBridge.injectFurnaceRecipes(server);
         LOGGER.info("Loaded {} recipes into ZhenRecipeManager", ZhenRecipeManager.getInstance().getRecipeCount());
+    }
+
+    private static void syncRecipesToAll() {
+        var recipes = ZhenRecipeManager.getInstance().getAllRecipes();
+        if (recipes.isEmpty()) return;
+        var payload = new cn.yhzcake.magicio.network.ZhenRecipeSyncPayload(recipes);
+        net.neoforged.neoforge.network.PacketDistributor.sendToAllPlayers(payload);
+        LOGGER.info("Synced {} recipes to all online players", recipes.size());
     }
 }

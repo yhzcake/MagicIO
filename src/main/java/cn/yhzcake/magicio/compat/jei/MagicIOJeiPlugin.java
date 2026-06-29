@@ -3,8 +3,8 @@ package cn.yhzcake.magicio.compat.jei;
 import cn.yhzcake.magicio.MagicIO;
 import cn.yhzcake.magicio.block.ModBlocks;
 import cn.yhzcake.magicio.block.zhen.ZhenLevel;
-import cn.yhzcake.magicio.item.crafting.ZhenRecipe;
-import cn.yhzcake.magicio.item.crafting.ZhenRecipeManager;
+import cn.yhzcake.magicio.io.ModIOTypes;
+import cn.yhzcake.magicio.item.crafting.*;
 import mezz.jei.api.IModPlugin;
 import mezz.jei.api.JeiPlugin;
 import mezz.jei.api.constants.RecipeTypes;
@@ -13,6 +13,7 @@ import mezz.jei.api.registration.IRecipeCatalystRegistration;
 import mezz.jei.api.registration.IRecipeCategoryRegistration;
 import mezz.jei.api.registration.IRecipeRegistration;
 import mezz.jei.api.runtime.IJeiRuntime;
+import net.minecraft.core.NonNullList;
 import net.minecraft.resources.Identifier;
 
 import java.util.*;
@@ -22,10 +23,48 @@ public class MagicIOJeiPlugin implements IModPlugin {
 
     public static final Identifier PLUGIN_ID = Identifier.fromNamespaceAndPath(MagicIO.MOD_ID, "jei_plugin");
 
-    /** baseName → IRecipeType */
     private static final Map<String, IRecipeType<ZhenRecipe>> CATEGORIES = new LinkedHashMap<>();
     private static boolean categoriesBuilt = false;
     private static IJeiRuntime jeiRuntime;
+
+    /** classpath 上的配方路径（仅在 registerRecipes 时缓存为空时使用） */
+    private static final String[] RECIPE_PATHS = {
+        "data/magic_io/recipe/unstable/cinder.json",
+        "data/magic_io/recipe/unstable/dew.json",
+        "data/magic_io/recipe/unstable/sieve.json",
+        "data/magic_io/recipe/unstable/zephyr.json",
+        "data/magic_io/recipe/stable/carve.json",
+        "data/magic_io/recipe/stable/compact.json",
+        "data/magic_io/recipe/stable/frost.json",
+        "data/magic_io/recipe/stable/grind.json",
+        "data/magic_io/recipe/stable/potion.json",
+        "data/magic_io/recipe/stable/sprout.json",
+        "data/magic_io/recipe/stable/voltaic.json",
+        "data/magic_io/recipe/sturdy/blaze.json",
+        "data/magic_io/recipe/sturdy/ferment.json",
+        "data/magic_io/recipe/sturdy/gem.json",
+        "data/magic_io/recipe/sturdy/mold.json",
+        "data/magic_io/recipe/sturdy/shift.json",
+        "data/magic_io/recipe/sturdy/spring.json",
+        "data/magic_io/recipe/sturdy/thunder.json",
+        "data/magic_io/recipe/sturdy/whirl.json",
+        "data/magic_io/recipe/abundant/conflux.json",
+        "data/magic_io/recipe/abundant/distill.json",
+        "data/magic_io/recipe/abundant/divine.json",
+        "data/magic_io/recipe/abundant/engrave.json",
+        "data/magic_io/recipe/abundant/gate.json",
+        "data/magic_io/recipe/abundant/quake.json",
+        "data/magic_io/recipe/abundant/symbiosis.json",
+        "data/magic_io/recipe/abundant/synthesis.json",
+        "data/magic_io/recipe/archaic/fate.json",
+        "data/magic_io/recipe/archaic/foresight.json",
+        "data/magic_io/recipe/archaic/haste.json",
+        "data/magic_io/recipe/archaic/summon.json",
+        "data/magic_io/recipe/archaic/transmute.json",
+        "data/magic_io/recipe/archaic/void.json",
+        "data/magic_io/recipe/archaic/weave.json",
+        "data/magic_io/recipe/primeval/creative.json"
+    };
 
     private static IRecipeType<ZhenRecipe> type(String baseName) {
         return IRecipeType.create(MagicIO.MOD_ID, baseName, ZhenRecipe.class);
@@ -44,11 +83,9 @@ public class MagicIOJeiPlugin implements IModPlugin {
         return stripSuffix(ZhenLevel.baseName(blockName));
     }
 
-    /** 从方块列表推断所有分类，无需读取配方文件 */
     private static void ensureCategories() {
         if (categoriesBuilt) return;
         categoriesBuilt = true;
-
         for (var blockEntry : ModBlocks.ZHEN_BLOCKS.entrySet()) {
             String name = blockBaseName(blockEntry.getKey());
             if ("forge".equals(name)) continue;
@@ -63,31 +100,37 @@ public class MagicIOJeiPlugin implements IModPlugin {
     public void registerCategories(IRecipeCategoryRegistration registration) {
         ensureCategories();
         if (CATEGORIES.isEmpty()) return;
-
         var helper = registration.getJeiHelpers().getGuiHelper();
         for (var entry : CATEGORIES.entrySet()) {
-            registration.addRecipeCategories(
-                    new ZhenRecipeCategory(helper, entry.getKey(), entry.getValue()));
+            registration.addRecipeCategories(new ZhenRecipeCategory(helper, entry.getKey(), entry.getValue()));
         }
-        MagicIO.LOGGER.info("[JEI] Registered {} zhen categories (from blocks)", CATEGORIES.size());
+        MagicIO.LOGGER.info("[JEI] Registered {} zhen categories", CATEGORIES.size());
     }
 
     @Override
     public void registerRecipes(IRecipeRegistration registration) {
         ensureCategories();
-        // 从缓存读取（单机时集成服务器可能已加载完毕）
-        tryRegisterFromCache(registration);
-        MagicIO.LOGGER.info("[JEI] Recipe registration complete (deferred to network sync)");
+
+        // 优先从缓存取（单机集成服务器已有数据）
+        var cached = ZhenRecipeManager.getInstance().getAllRecipes();
+        if (!cached.isEmpty()) {
+            int count = registerFrom(cached, registration::addRecipes);
+            if (count > 0) {
+                MagicIO.LOGGER.info("[JEI] Registered {} zhen recipes from cache", count);
+                return;
+            }
+        }
+
+        // 缓存为空，从 classpath 加载（getResourceAsStream，jar 内也可用）
+        int count = loadAndRegisterFromClasspath(registration);
+        MagicIO.LOGGER.info("[JEI] Registered {} zhen recipes from classpath", count);
     }
 
     @Override
     public void registerRecipeCatalysts(IRecipeCatalystRegistration registration) {
         ensureCategories();
-
         for (var blockEntry : ModBlocks.ZHEN_BLOCKS.entrySet()) {
-            String blockName = blockEntry.getKey();
-            String name = blockBaseName(blockName);
-
+            String name = blockBaseName(blockEntry.getKey());
             if ("forge".equals(name)) {
                 registration.addCraftingStation(RecipeTypes.SMELTING, blockEntry.getValue().get());
             } else {
@@ -102,82 +145,94 @@ public class MagicIOJeiPlugin implements IModPlugin {
     @Override
     public void onRuntimeAvailable(IJeiRuntime runtime) {
         jeiRuntime = runtime;
-        // 运行时就绪后立即从缓存拉取（覆盖网络包到达较晚的情况）
+        // 运行时就绪后也尝试刷新（覆盖网络包到达较早的情况）
         var all = ZhenRecipeManager.getInstance().getAllRecipes();
-        if (!all.isEmpty()) {
-            refreshRecipes();
-        }
+        if (!all.isEmpty()) refreshFromCache();
     }
 
-    // ====== 运行时刷新方法 ======
+    // ====== 运行时刷新 ======
 
-    /**
-     * 从 ZhenRecipeManager 缓存中读取配方并动态注入 JEI。
-     * 在网络同步数据包到达后调用。
-     */
-    public static void refreshRecipes() {
-        if (jeiRuntime == null) {
-            MagicIO.LOGGER.warn("[JEI] Runtime not available, cannot refresh");
-            return;
-        }
-        var recipeManager = jeiRuntime.getRecipeManager();
-        injectRecipes(recipeManager::addRecipes);
-    }
-
-    /** 在 registerRecipes 时从缓存读取 */
-    private static void tryRegisterFromCache(IRecipeRegistration registration) {
-        injectRecipes(registration::addRecipes);
-    }
-
-    /** 从缓存提取配方并注入目标接收器 */
-    private static void injectRecipes(RecipeConsumer consumer) {
+    /** 服务端同步后调用：用服务端配方刷新 JEI 显示 */
+    public static void refreshFromCache() {
+        if (jeiRuntime == null) return;
         var all = ZhenRecipeManager.getInstance().getAllRecipes();
         if (all.isEmpty()) return;
 
+        var recipeManager = jeiRuntime.getRecipeManager();
+        // 先隐藏该类型下所有现有配方，再添加新的
+        for (var type : CATEGORIES.values()) {
+            var existing = recipeManager.createRecipeLookup(type).get().toList();
+            recipeManager.hideRecipes(type, existing);
+        }
+
+        int count = registerFrom(all, recipeManager::addRecipes);
+        MagicIO.LOGGER.info("[JEI] Refreshed {} zhen recipes from server sync", count);
+    }
+
+    // ====== 内部 ======
+
+    @FunctionalInterface
+    private interface RecipeAdder {
+        void add(IRecipeType<ZhenRecipe> type, List<ZhenRecipe> recipes);
+    }
+
+    /** 从配方列表注册到目标接收器 */
+    private static int registerFrom(List<ZhenRecipe> recipes, RecipeAdder adder) {
         Map<String, ZhenRecipe> unique = new LinkedHashMap<>();
-        for (var recipe : all) {
+        for (var recipe : recipes) {
             String name = baseName(recipe);
             if ("forge".equals(name)) continue;
-            // 过滤全空的坏数据（注册表未就绪时加载的配方，所有输出都为空）
             if (recipe.getFixedOutputs().isEmpty() && !hasLootOutput(recipe) && !hasFluidOutput(recipe)) continue;
             unique.putIfAbsent(name, recipe);
         }
-        if (unique.isEmpty()) return;
 
         int count = 0;
         for (var entry : unique.entrySet()) {
             IRecipeType<ZhenRecipe> type = CATEGORIES.get(entry.getKey());
             if (type != null) {
-                consumer.accept(type, List.of(entry.getValue()));
+                adder.add(type, List.of(entry.getValue()));
                 count++;
             }
         }
-        MagicIO.LOGGER.info("[JEI] Injected {} zhen recipes from cache", count);
+        return count;
     }
 
-    /** 检查配方是否有战利品表输出 */
+    /** 从 classpath 加载并注册 */
+    private static int loadAndRegisterFromClasspath(IRecipeRegistration registration) {
+        Set<String> seenNames = new HashSet<>();
+        int count = 0;
+
+        for (String path : RECIPE_PATHS) {
+            try (var in = MagicIOJeiPlugin.class.getClassLoader().getResourceAsStream(path)) {
+                if (in == null) continue;
+                var recipe = ZhenRecipeLoader.loadRecipeFromJson(in, null);
+                if (recipe == null) continue;
+                String name = baseName(recipe);
+                if ("forge".equals(name) || !seenNames.add(name)) continue;
+                IRecipeType<ZhenRecipe> type = CATEGORIES.get(name);
+                if (type != null) {
+                    registration.addRecipes(type, List.of(recipe));
+                    count++;
+                }
+            } catch (Exception ignored) {}
+        }
+        return count;
+    }
+
     @SuppressWarnings("unchecked")
     private static boolean hasLootOutput(ZhenRecipe recipe) {
         for (var output : recipe.getOutputs()) {
-            if (output.type() != cn.yhzcake.magicio.io.ModIOTypes.ITEM.get()) continue;
-            var entries = (net.minecraft.core.NonNullList<cn.yhzcake.magicio.item.crafting.OutputEntry>) output.specification();
-            for (var entry : entries) {
-                if (entry.isLootTable()) return true;
-            }
+            if (output.type() != ModIOTypes.ITEM.get()) continue;
+            var entries = (NonNullList<OutputEntry>) output.specification();
+            for (var entry : entries) if (entry.isLootTable()) return true;
         }
         return false;
     }
 
-    /** 检查配方是否有流体输出 */
     private static boolean hasFluidOutput(ZhenRecipe recipe) {
         for (var output : recipe.getOutputs()) {
-            if (output.type() == cn.yhzcake.magicio.io.ModIOTypes.FLUID.get()) return true;
+            if (output.type() == ModIOTypes.FLUID.get()) return true;
         }
         return false;
-    }
-
-    @FunctionalInterface
-    private interface RecipeConsumer {
-        void accept(IRecipeType<ZhenRecipe> type, List<ZhenRecipe> recipes);
     }
 }
