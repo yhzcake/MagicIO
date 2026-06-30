@@ -28,6 +28,7 @@ public class MagicIOJeiPlugin implements IModPlugin {
     private static IJeiRuntime jeiRuntime;
 
     /** classpath 上的配方路径（仅在 registerRecipes 时缓存为空时使用） */
+    /* TEMP: 暂时注释，用于测试网络同步
     private static final String[] RECIPE_PATHS = {
         "data/magic_io/recipe/unstable/cinder.json",
         "data/magic_io/recipe/unstable/dew.json",
@@ -65,6 +66,7 @@ public class MagicIOJeiPlugin implements IModPlugin {
         "data/magic_io/recipe/archaic/weave.json",
         "data/magic_io/recipe/primeval/creative.json"
     };
+    */
 
     private static IRecipeType<ZhenRecipe> type(String baseName) {
         return IRecipeType.create(MagicIO.MOD_ID, baseName, ZhenRecipe.class);
@@ -121,9 +123,8 @@ public class MagicIOJeiPlugin implements IModPlugin {
             }
         }
 
-        // 缓存为空，从 classpath 加载（getResourceAsStream，jar 内也可用）
-        int count = loadAndRegisterFromClasspath(registration);
-        MagicIO.LOGGER.info("[JEI] Registered {} zhen recipes from classpath", count);
+        // 缓存为空时不注册任何配方（测试网络同步用）
+        MagicIO.LOGGER.info("[JEI] No cached recipes, waiting for server sync");
     }
 
     @Override
@@ -198,6 +199,7 @@ public class MagicIOJeiPlugin implements IModPlugin {
     }
 
     /** 从 classpath 加载并注册 */
+    /* TEMP: 暂时注释，用于测试网络同步
     private static int loadAndRegisterFromClasspath(IRecipeRegistration registration) {
         Set<String> seenNames = new HashSet<>();
         int count = 0;
@@ -218,6 +220,7 @@ public class MagicIOJeiPlugin implements IModPlugin {
         }
         return count;
     }
+    */
 
     @SuppressWarnings("unchecked")
     private static boolean hasLootOutput(ZhenRecipe recipe) {

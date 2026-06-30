@@ -130,6 +130,7 @@ public class MagicIO {
         CREATIVE_MODE_TABS.register(modEventBus);
 
         modEventBus.addListener(this::commonSetup);
+        modEventBus.addListener(this::registerPayloads);
 
         NeoForge.EVENT_BUS.register(this);
 
@@ -358,6 +359,17 @@ public class MagicIO {
         );
     }
 
+    /** 注册自定义网络数据包 */
+    private void registerPayloads(net.neoforged.neoforge.network.event.RegisterPayloadHandlersEvent event) {
+        var registrar = event.registrar(MOD_ID);
+        registrar.playToClient(
+                cn.yhzcake.magicio.network.ZhenRecipeSyncPayload.TYPE,
+                cn.yhzcake.magicio.network.ZhenRecipeSyncPayload.STREAM_CODEC,
+                cn.yhzcake.magicio.network.ZhenRecipeSyncPayload::handle
+        );
+        LOGGER.info("Registered zhen_recipe_sync network payload");
+    }
+
     private void commonSetup(FMLCommonSetupEvent event) {
         LOGGER.info("HELLO FROM COMMON SETUP");
         if (Config.LOG_DIRT_BLOCK.getAsBoolean()) {
@@ -384,16 +396,10 @@ public class MagicIO {
     @SubscribeEvent
     public void onPlayerLogin(net.neoforged.neoforge.event.entity.player.PlayerEvent.PlayerLoggedInEvent event) {
         var entity = event.getEntity();
-        if (!(entity instanceof net.minecraft.server.level.ServerPlayer player)) return;
-        // 延迟到主线程执行，确保线程安全
-        var server = player.level().getServer();
-        server.execute(() -> {
-            var recipes = ZhenRecipeManager.getInstance().getAllRecipes();
-            if (recipes.isEmpty()) return;
-            var payload = new cn.yhzcake.magicio.network.ZhenRecipeSyncPayload(recipes);
-            net.neoforged.neoforge.network.PacketDistributor.sendToPlayer(player, payload);
-            LOGGER.info("Synced {} recipes to player {}", recipes.size(), player.getName().getString());
-        });
+        if (!(entity instanceof net.minecraft.server.level.ServerPlayer)) return;
+        // 延迟到主线程执行，广播给所有在线玩家（含刚登录的这位）
+        var server = entity.level().getServer();
+        server.execute(MagicIO::syncRecipesToAll);
     }
 
     @SubscribeEvent
