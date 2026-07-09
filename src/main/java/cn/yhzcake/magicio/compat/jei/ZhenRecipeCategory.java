@@ -2,6 +2,7 @@ package cn.yhzcake.magicio.compat.jei;
 
 import cn.yhzcake.magicio.MagicIO;
 import cn.yhzcake.magicio.block.ModBlocks;
+import cn.yhzcake.magicio.block.zhen.ZhenLevel;
 import cn.yhzcake.magicio.io.ModIOTypes;
 import cn.yhzcake.magicio.item.crafting.OutputEntry;
 import cn.yhzcake.magicio.item.crafting.RecipeInput;
@@ -172,10 +173,20 @@ public class ZhenRecipeCategory implements IRecipeCategory<ZhenRecipe> {
     public void draw(ZhenRecipe recipe, IRecipeSlotsView recipeSlotsView,
                      GuiGraphicsExtractor guiGraphics, double mouseX, double mouseY) {
         var font = Minecraft.getInstance().font;
-        guiGraphics.text(font, "\u279C", WIDTH / 2 - 4, INPUT_Y, 0xFF555555, false);
+
         int sec = Math.max(1, recipe.getProcessingTime() / 20);
         String timeStr = sec + "s";
         guiGraphics.text(font, timeStr, WIDTH / 2 - font.width(timeStr) / 2, INPUT_Y + 8, 0xFF888888, false);
+
+        // 显示配方所需等级（如 Unstable、Stable）
+        String path = recipe.getZhenTypeId().getPath();
+        ZhenLevel level = ZhenLevel.fromFullId(path);
+        if (level != null) {
+            String keyName = level.prefix().substring(0, level.prefix().length() - 1); // "unstable_" → "unstable"
+            Component levelComp = Component.translatable("magic_io.level." + keyName);
+            String rendered = levelComp.getString();
+            guiGraphics.text(font, rendered, WIDTH / 2 - font.width(rendered) / 2, INPUT_Y, 0xFF888888, false);
+        }
     }
 
     // ====== 辅助方法 ======

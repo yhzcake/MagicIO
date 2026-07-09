@@ -95,11 +95,12 @@ public class RecipeProcessor {
 
         // 阶段二：有配方 → 推进进度
         if (state.currentRecipe != null) {
-            // 检查输入是否仍然匹配
+            // 检查输入是否仍然匹配（含等级检查）
             if (state.inputsChanged) {
-                if (!state.currentRecipe.matches(items, partition, level)
+                if (!isRecipeLevelAllowed(state.currentRecipe, zhenType)
+                        || !state.currentRecipe.matches(items, partition, level)
                         || !state.currentRecipe.matchesFluid(tanks, partition)) {
-                    MagicIO.LOGGER.trace("[{}] processTick: recipe {} input no longer matches, aborting", pos.toShortString(), state.currentRecipe.getZhenTypeStr());
+                    MagicIO.LOGGER.trace("[{}] processTick: recipe {} no longer valid (level/input/fluid mismatch), aborting", pos.toShortString(), state.currentRecipe.getZhenTypeStr());
                     state.currentRecipe = null;
                     state.processTime = 0;
                     state.inputsChanged = false;
@@ -155,12 +156,31 @@ public class RecipeProcessor {
         return hash;
     }
 
+    /**
+     * 检查配方的等级是否不超过实际阵的等级。
+     * 如果配方 zhen_type 的等级高于当前阵的等级，返回 false 禁止加工。
+     */
+    private static boolean isRecipeLevelAllowed(ZhenRecipe recipe, String zhenType) {
+        String recipePath = recipe.getZhenTypeId().getPath();
+        ZhenLevel recipeLevel = ZhenLevel.fromFullId(recipePath);
+        String zhenPath = zhenType.contains(":") ? zhenType.substring(zhenType.indexOf(':') + 1) : zhenType;
+        ZhenLevel actualLevel = ZhenLevel.fromFullId(zhenPath);
+
+        // 无法识别等级时，保守地允许（保持兼容）
+        if (recipeLevel == null || actualLevel == null) return true;
+        return recipeLevel.level() <= actualLevel.level();
+    }
+
     // ============ 阶段一辅助 ============
 
     private static boolean findRecipeFromCache(State state, String zhenType,
             NonNullList<ItemStack> items, NonNullList<FluidStack> tanks,
             SlotPartition partition, Level level) {
         if (state.lastValidRecipe == null) return false;
+        if (!isRecipeLevelAllowed(state.lastValidRecipe, zhenType)) {
+            state.lastValidRecipe = null;
+            return false;
+        }
         if (state.lastValidRecipe.matches(items, partition, level)
                 && state.lastValidRecipe.matchesFluid(tanks, partition)) {
             state.currentRecipe = state.lastValidRecipe;
@@ -189,12 +209,15 @@ public class RecipeProcessor {
 
         ZhenRecipe newRecipe = ZhenRecipeManager.getInstance().findRecipe(
                 zhenType, items, partition, level);
-        if (newRecipe != null && newRecipe.matchesFluid(tanks, partition)) {
+        if (newRecipe != null && newRecipe.matchesFluid(tanks, partition)
+                && isRecipeLevelAllowed(newRecipe, zhenType)) {
             state.currentRecipe = newRecipe;
             computeEffectiveValues(state, zhenType);
             state.lastValidRecipe = newRecipe;
             state.processTime = 0;
             state.inputsChanged = false;
+        } else {
+            state.lastValidRecipe = null;
         }
         state.lastInputHash = currentHash;
     }

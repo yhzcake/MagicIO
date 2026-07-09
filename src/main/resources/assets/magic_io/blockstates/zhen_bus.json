@@ -1,0 +1,7 @@
+{
+  "variants": {
+    "": {
+      "model": "magic_io:block/zhen_bus_base"
+    }
+  }
+}

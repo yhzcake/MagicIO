@@ -1,0 +1,17 @@
+{
+  "parent": "block/block",
+  "textures": {
+    "0": "magic_io:block/magic_circle",
+    "particle": "magic_io:block/magic_circle"
+  },
+  "elements": [
+    {
+      "from": [0, 0, 0],
+      "to": [16, 0.5, 16],
+      "faces": {
+        "up": {"uv": [0, 0, 16, 16], "texture": "#0"},
+        "down": {"uv": [0, 0, 16, 16], "texture": "#0"}
+      }
+    }
+  ]
+}

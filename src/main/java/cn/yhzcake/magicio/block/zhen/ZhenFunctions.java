@@ -2,9 +2,8 @@ package cn.yhzcake.magicio.block.zhen;
 
 import java.util.function.Supplier;
 
-import cn.yhzcake.magicio.block.entity.method.UnstableDewMethod;
-import cn.yhzcake.magicio.block.entity.method.UnstableSiftMethod;
 import cn.yhzcake.magicio.utils.ElementTypes;
+import cn.yhzcake.magicio.block.entity.method.PortalMethod;
 import net.neoforged.bus.api.IEventBus;
 
 /**
@@ -20,10 +19,8 @@ public class ZhenFunctions {
 
     // ===== Level 0 — 不稳定（通过元素缓慢聚集）=====
     public static final ZhenFunction CINDER   = ZhenFunction.simpleItem("cinder",   ElementTypes.FIRE, 0);
-    public static final ZhenFunction SIEVE    = ZhenFunction.simpleItemWithTick("sieve", ElementTypes.EARTH, 0,
-            (l, p, s, be) -> () -> new UnstableSiftMethod(l, p, s, be).unstable_sift_tick());
-    public static final ZhenFunction DEW      = ZhenFunction.fluidItem("dew", ElementTypes.WATER, 0,
-            (l, p, s, be) -> () -> new UnstableDewMethod(l, p, s, be).unstable_dew_tick(), 1000);
+    public static final ZhenFunction SIEVE    = ZhenFunction.simpleItem("sieve", ElementTypes.EARTH, 0);
+    public static final ZhenFunction DEW      = ZhenFunction.fluidItem("dew", ElementTypes.WATER, 0,1000);
     public static final ZhenFunction ZEPHYR   = ZhenFunction.simpleItem("zephyr",   ElementTypes.WIND, 0);
 
     // ===== Level 10 — 稳定（借用元素性质）=====
@@ -64,6 +61,8 @@ public class ZhenFunctions {
     public static final ZhenFunction TRANSMUTE  = ZhenFunction.simpleItem("transmute",  ElementTypes.ENERGY, 40);
     public static final ZhenFunction FORESIGHT  = ZhenFunction.simpleItem("foresight",  ElementTypes.DESCRIPTION, 40);
     public static final ZhenFunction SUMMON     = ZhenFunction.simpleItem("summon",     ElementTypes.CONSCIOUSNESS, 40);
+    public static final ZhenFunction PORTAL     = ZhenFunction.tickOnly("portal",     ElementTypes.SPACE, 40,
+            (l, p, s, be) -> () -> new PortalMethod(l, p, s, be).portal_tick());
 
     // ===== Level 50 — 远古（终极）=====
     public static final ZhenFunction CREATIVE   = ZhenFunction.simpleItem("creative",   ElementTypes.CREATIVE, 50);
@@ -106,6 +105,7 @@ public class ZhenFunctions {
         TRANSMUTE.register(reg);
         FORESIGHT.register(reg);
         SUMMON.register(reg);
+        PORTAL.register(reg);
         CREATIVE.register(reg);
     }
 }

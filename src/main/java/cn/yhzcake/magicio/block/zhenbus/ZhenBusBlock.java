@@ -28,10 +28,12 @@ import net.minecraft.world.level.BlockGetter;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.BaseEntityBlock;
 import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.block.RenderShape;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.entity.BlockEntityTicker;
 import net.minecraft.world.level.block.entity.BlockEntityType;
 import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.Vec3;
 import net.minecraft.world.phys.shapes.CollisionContext;
@@ -48,9 +50,58 @@ public class ZhenBusBlock extends BaseEntityBlock {
         super(properties);
     }
 
+    // ============ 视线-面命中检测（共享给 Jade 等使用）============
+
+    static final Direction[] DIRS = Direction.values();
+    /** 各面薄片 AABB，厚度 1/16 */
+    static final double T = 1.0 / 16;
+    static final AABB[] FACE_BOUNDS = new AABB[] {
+        new AABB(0, 0, 0, 1, T, 1),          // DOWN
+        new AABB(0, 1 - T, 0, 1, 1, 1),      // UP
+        new AABB(0, 0, 0, 1, 1, T),          // NORTH
+        new AABB(0, 0, 1 - T, 1, 1, 1),      // SOUTH
+        new AABB(0, 0, 0, T, 1, 1),          // WEST
+        new AABB(1 - T, 0, 0, 1, 1, 1),      // EAST
+    };
+
+    /**
+     * 对每个装了处理器的面做薄片 AABB 碰撞，用「距离 ÷ 朝向加权」选面。
+     * 视线穿过空面打中对向面、侧瞄边缘等场景均可正确处理。
+     */
+    public static Direction pickFace(ZhenBusHost be, Player player, BlockPos pos) {
+        if (player == null) return null;
+        Vec3 from = player.getEyePosition();
+        Vec3 dir = player.getLookAngle();
+        Vec3 to = from.add(dir.scale(6));
+
+        Direction best = null;
+        double bestWeight = Double.MAX_VALUE;
+        for (int i = 0; i < 6; i++) {
+            if (be.getProcessor(DIRS[i]) == null) continue;
+            AABB worldBox = FACE_BOUNDS[i].move(pos);
+            Vec3 hit = worldBox.clip(from, to).orElse(null);
+            if (hit != null) {
+                double dist = hit.distanceToSqr(from);
+                Vec3 normal = DIRS[i].getUnitVec3();
+                double facingDot = -dir.dot(normal);
+                double weighted = dist / Math.max(facingDot, 0.01);
+                if (weighted < bestWeight) {
+                    bestWeight = weighted;
+                    best = DIRS[i];
+                }
+            }
+        }
+        return best;
+    }
+
     @Override
     public BlockEntity newBlockEntity(BlockPos pos, BlockState state) {
         return new ZhenBusBlockEntity(pos, state);
+    }
+
+    @Override
+    public RenderShape getRenderShape(BlockState state) {
+        return RenderShape.INVISIBLE;
     }
 
     @Override
@@ -127,7 +178,9 @@ public class ZhenBusBlock extends BaseEntityBlock {
         if (level.isClientSide()) return InteractionResult.SUCCESS;
         if (!(level.getBlockEntity(pos) instanceof ZhenBusBlockEntity be)) return InteractionResult.PASS;
 
-        Direction face = hitResult.getDirection();
+        // 用视线-薄片命中检测替代 hitResult.getDirection()，解决边缘误判
+        Direction face = pickFace(be, player, pos);
+        if (face == null) face = hitResult.getDirection();
         var processor = be.getProcessor(face);
 
         // GridCell 面交互：主手持 stick

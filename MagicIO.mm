@@ -115,8 +115,8 @@
       <node TEXT="时间元素与空间元素发现能量元素" ID="52cacbcfb43fbf828153ab66f19acc68" STYLE="fork">
         <node TEXT="能量元素操控四大基本力（维持阵法稳定等）" ID="dc1668f0eb74b3da459d38163a035d55" STYLE="fork"/>
       </node>
-      <node TEXT="雷元素与土元素与能量元素发现意识元素" ID="1a5329fefc8487c72281cda189cf4fd3" STYLE="fork">
-        <node TEXT="意识元素操控灵魂（含生物信息的能量团，刷怪笼）" ID="bb9a1add517ed05c36258b32f79c21c3" STYLE="fork"/>
+      <node TEXT="雷元素与土元素与描述元素发现意识元素" ID="1a5329fefc8487c72281cda189cf4fd3" STYLE="fork">
+        <node TEXT="意识元素操控灵魂（含生物信息的聚合体，刷怪笼）" ID="bb9a1add517ed05c36258b32f79c21c3" STYLE="fork"/>
       </node>
     </node>
     <node TEXT="当然可以！这是一个非常聪明且关键的改进。你已经从“用什么去敲”的思维定式，跃升到了“如何更有效地磨”的层面。" ID="7dd0b7d9f88f48c276b9233a33afdcc2" STYLE="bubble" POSITION="right"/>

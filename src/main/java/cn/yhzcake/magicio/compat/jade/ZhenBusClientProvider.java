@@ -2,16 +2,13 @@ package cn.yhzcake.magicio.compat.jade;
 
 import cn.yhzcake.magicio.MagicIO;
 import cn.yhzcake.magicio.block.zhen.ZhenLevel;
+import cn.yhzcake.magicio.block.zhenbus.ZhenBusBlock;
 import cn.yhzcake.magicio.block.zhenbus.ZhenBusBlockEntity;
 import cn.yhzcake.magicio.io.ModIOTypes;
 import cn.yhzcake.magicio.io.SideProcessor;
-import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.Identifier;
-import net.minecraft.world.entity.player.Player;
-import net.minecraft.world.phys.AABB;
-import net.minecraft.world.phys.Vec3;
 import snownee.jade.api.BlockAccessor;
 import snownee.jade.api.IBlockComponentProvider;
 import snownee.jade.api.ITooltip;
@@ -26,50 +23,16 @@ public enum ZhenBusClientProvider implements IBlockComponentProvider {
 
     INSTANCE;
 
-    static final double T = 1.0 / 16;
-    static final AABB[] FACE_BOUNDS = new AABB[] {
-        new AABB(0, 0, 0, 1, T, 1),          // DOWN
-        new AABB(0, 1 - T, 0, 1, 1, 1),      // UP
-        new AABB(0, 0, 0, 1, 1, T),          // NORTH
-        new AABB(0, 0, 1 - T, 1, 1, 1),      // SOUTH
-        new AABB(0, 0, 0, T, 1, 1),          // WEST
-        new AABB(1 - T, 0, 0, 1, 1, 1),      // EAST
-    };
-    static final Direction[] DIRS = Direction.values();
-
     @Override
     public Identifier getUid() {
         return Identifier.fromNamespaceAndPath(MagicIO.MOD_ID, "zhen_bus");
-    }
-
-    /** 根据玩家视线做射线-薄片命中检测，返回指向的面 */
-    static Direction pickFace(ZhenBusBlockEntity be, Player player, BlockPos pos) {
-        if (player == null) return null;
-        Vec3 from = player.getEyePosition();
-        Vec3 dir = player.getLookAngle();
-        Vec3 to = from.add(dir.scale(6));
-        Direction best = null;
-        double bestDist = Double.MAX_VALUE;
-        for (int i = 0; i < 6; i++) {
-            if (be.getProcessor(DIRS[i]) == null) continue;
-            AABB worldBox = FACE_BOUNDS[i].move(pos);
-            Vec3 hit = worldBox.clip(from, to).orElse(null);
-            if (hit != null) {
-                double dist = hit.distanceToSqr(from);
-                if (dist < bestDist) {
-                    bestDist = dist;
-                    best = DIRS[i];
-                }
-            }
-        }
-        return best;
     }
 
     @Override
     public void appendTooltip(ITooltip tooltip, BlockAccessor accessor, IPluginConfig config) {
         if (!(accessor.getBlockEntity() instanceof ZhenBusBlockEntity be)) return;
 
-        Direction hitFace = pickFace(be, accessor.getPlayer(), accessor.getPosition());
+        Direction hitFace = ZhenBusBlock.pickFace(be, accessor.getPlayer(), accessor.getPosition());
         if (hitFace == null) hitFace = accessor.getSide();
 
         SideProcessor sp = be.getProcessor(hitFace);

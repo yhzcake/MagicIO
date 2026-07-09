@@ -98,14 +98,22 @@ public class ZhenFunction {
                 null, tickFactory, null);
     }
 
+    /** 无存储槽位，纯 tick 逻辑（如传送门等） */
+    public static ZhenFunction tickOnly(String baseName, Supplier<ElementType> element,
+            int introducedAtLevel, TickFactory tickFactory) {
+        return new ZhenFunction(baseName, element, introducedAtLevel,
+                () -> SlotPartition.of(Map.of()),
+                null, tickFactory, null);
+    }
+
     /** 物品+流体混合 + tick */
     public static ZhenFunction fluidItem(String baseName, Supplier<ElementType> element,
-            int introducedAtLevel, TickFactory tickFactory, int tankCapacity) {
+            int introducedAtLevel, int tankCapacity) {
         return new ZhenFunction(baseName, element, introducedAtLevel,
                 () -> SlotPartition.of(Map.of(
                     ModIOTypes.ITEM.get(), ZhenTypes.defaultItemSlots(),
                     ModIOTypes.FLUID.get(), Map.of(SlotZone.FLUID_OUTPUT_ALL, ZhenTypes.range(0, 0))
                 )),
-                null, tickFactory, tankCapacity);
+                null, null, tankCapacity);
     }
 }

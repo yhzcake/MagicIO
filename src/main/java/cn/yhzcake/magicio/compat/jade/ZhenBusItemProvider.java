@@ -1,6 +1,7 @@
 package cn.yhzcake.magicio.compat.jade;
 
 import cn.yhzcake.magicio.MagicIO;
+import cn.yhzcake.magicio.block.zhenbus.ZhenBusBlock;
 import cn.yhzcake.magicio.block.zhenbus.ZhenBusBlockEntity;
 import cn.yhzcake.magicio.io.ModIOTypes;
 import cn.yhzcake.magicio.io.SideProcessor;
@@ -32,7 +33,7 @@ public enum ZhenBusItemProvider implements IServerExtensionProvider<ItemStack> {
         if (!(accessor instanceof BlockAccessor blockAccessor)) return List.of();
         if (!(blockAccessor.getBlockEntity() instanceof ZhenBusBlockEntity be)) return List.of();
 
-        Direction hitFace = ZhenBusClientProvider.pickFace(
+        Direction hitFace = ZhenBusBlock.pickFace(
                 be, accessor.getPlayer(), blockAccessor.getPosition());
         if (hitFace == null) hitFace = Direction.DOWN;
 
