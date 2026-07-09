@@ -123,12 +123,7 @@ public class ZhenBusBlock extends BaseEntityBlock {
 
     @Override
     public VoxelShape getCollisionShape(BlockState state, BlockGetter level, BlockPos pos, CollisionContext ctx) {
-        // 返回与视觉形状一致的碰撞箱，使管道/导管模组能够识别并连接
-        if (level.getBlockEntity(pos) instanceof ZhenBusBlockEntity be) {
-            VoxelShape shape = be.getCombinedShape();
-            if (!shape.isEmpty()) return shape;
-        }
-        return ZhenBusContainer.DEFAULT_FACE;
+        return Shapes.empty();
     }
 
     @Override
