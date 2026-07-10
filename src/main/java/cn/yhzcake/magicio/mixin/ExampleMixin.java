@@ -12,6 +12,6 @@ import cn.yhzcake.magicio.MagicIO;
 public class ExampleMixin {
     @Inject(at = @At("HEAD"), method = "init")
     private void init(CallbackInfo info) {
-        MagicIO.LOGGER.info("This line is printed by an example mixin!");
+        MagicIO.LOGGER.info("MagicIO mixin successfully.");
     }
 }
