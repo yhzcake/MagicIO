@@ -35,7 +35,6 @@ import cn.yhzcake.magicio.item.crafting.ZhenRecipeManager;
 import cn.yhzcake.magicio.utils.ElementType;
 import cn.yhzcake.magicio.utils.ElementTypes;
 import cn.yhzcake.magicio.item.crafting.ForgeRecipeBridge;
-import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.core.component.DataComponents;
 import net.minecraft.core.registries.Registries;
