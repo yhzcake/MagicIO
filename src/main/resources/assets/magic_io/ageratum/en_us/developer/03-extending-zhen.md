@@ -1,3 +1,9 @@
+---
+title: "Extending Zhen"
+navigation:
+  title: "Chapter 3"
+---
+
 # Chapter 03: Extending Zhen
 
 ## 1. Core Model

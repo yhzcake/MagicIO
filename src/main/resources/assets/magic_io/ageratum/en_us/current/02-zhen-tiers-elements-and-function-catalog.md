@@ -1,3 +1,9 @@
+---
+title: "Zhen Tiers, Elements, and Function Catalog"
+navigation:
+  title: "Chapter 2"
+---
+
 # Chapter 2: Zhen Tiers, Elements, and Function Catalog
 
 ## 1. Tier Mechanics

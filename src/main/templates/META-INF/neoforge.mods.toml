@@ -36,5 +36,12 @@ description='''
     ordering="NONE"
     side="BOTH"
 
+[[dependencies.${mod_id}]]
+    modId="ageratum"
+    type="optional"
+    versionRange="[0.0.1,)"
+    ordering="AFTER"
+    side="CLIENT"
+
 [[mixins]]
 config="${mod_id}.mixins.json"

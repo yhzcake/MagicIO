@@ -1,3 +1,9 @@
+---
+title: "Zhen Bus and Six-Sided Processors"
+navigation:
+  title: "Chapter 4"
+---
+
 # Chapter 4: Zhen Bus and Six-Sided Processors
 
 ## 1. What Is the Zhen Bus?

@@ -1,3 +1,9 @@
+---
+title: "Development Environment and Project Structure"
+navigation:
+  title: "Chapter 1"
+---
+
 # Chapter 01: Development Environment and Project Structure
 
 ## 1. Chapter Goals

@@ -1,3 +1,9 @@
+---
+title: "Automation, Storage, and Logistics"
+navigation:
+  title: "Chapter 6"
+---
+
 # Automation, Storage, and Logistics
 
 > [!CAUTION]

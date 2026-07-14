@@ -1,0 +1,154 @@
+---
+title: "阵总线"
+navigation:
+  title: "第五章"
+---
+
+# 第 05 章：阵总线
+
+## 1. 设计目标
+
+阵总线把一个方块位置变成六个可独立安装阵功能的面。每个方向最多保存一个 `SideProcessor`，每个处理器拥有自己的阵类型、库存、流体、能量、配方进度、碰撞薄片和外部 Capability。总线本体负责容器化、交互、存档、同步和渲染，不直接实现具体配方。
+
+## 2. 类职责
+
+| 类 | 职责 |
+|---|---|
+| `ZhenBusBlock` | 放置交互、面命中、ticker、形状、掉落和处理器安装入口 |
+| `ZhenBusBlockEntity` | 宿主实现、持久化、延迟恢复、更新包与容器委托 |
+| `ZhenBusHost` | 对宿主能力的最小接口抽象 |
+| `ZhenBusContainer` | 添加/移除/tick 全部处理器、组合形状、收集掉落 |
+| `ZhenBusStorage` | `EnumMap<Direction, SideProcessor>` 与客户端方向标记 |
+| `SideProcessor` | 面模块生命周期、IO、交互、序列化及配方状态契约 |
+| `AbstractSideProcessor` | 普通阵类型的通用处理器实现 |
+| `GridCellSideProcessor` | grid_cell 的专用处理器实现 |
+| `VirtualPort` | 扫描相邻总线面并在处理器之间传送资源 |
+| `PortBinding` | 宿主方向、目标方向及输入输出区域绑定描述 |
+
+## 3. 安装与替换流程
+
+总线安装的核心流程位于 `ZhenBusContainer.add`：
+
+1. 读取目标方向的旧处理器。
+2. 若存在旧处理器，收集其掉落物、生成世界掉落并调用 `onRemove`。
+3. 若类型字符串为 `magic_io:grid_cell`，创建 `GridCellSideProcessor`；否则创建通用 `AbstractSideProcessor`。
+4. 调用 `onAdd`，绑定宿主变更回调，并把输入标记为变化。
+5. 写入按方向索引的 Storage。
+6. 使方块位置的 Capability 缓存失效。
+7. 执行宿主变更回调，触发保存与同步。
+
+`canAdd` 当前只判断方向是否为空；`add` 本身支持覆盖并掉落旧内容。调用层必须明确交互语义是禁止覆盖还是允许替换，不能仅依据方法名推断。
+
+## 4. SideProcessor 生命周期
+
+接口要求处理器实现：
+
+- 身份与上下文：方向、阵类型、位置、世界；
+- 工作循环：`tick`、`hasWork`、进度和输入变化状态；
+- IO：`IOProcessor`、面访问、序列化所需物品/流体；
+- 玩家交互：普通激活、潜行激活；
+- 生命周期：`onAdd`、`onRemove`、掉落收集；
+- 表现：碰撞形状、客户端缓冲区读写。
+
+新增专用处理器时必须完整实现这些契约。只实现 tick 而忽略掉落、NBT 或网络状态，会在拆除、重载或客户端观察时产生不一致。
+
+## 5. 通用面处理器
+
+`AbstractSideProcessor` 根据 `ZhenType` 初始化：
+
+1. 从 `SlotPartition` 计算物品和流体容器长度。
+2. 注册 Item、Fluid，以及可选 Energy IOComponent。
+3. 安装变更回调，使宿主标脏并让配方输入缓存失效。
+4. 缓存各类输入/输出槽集合。
+5. 把类型面访问规则复制进 `FaceAccessController`。
+6. 创建 `self` 与六方向虚拟端口。
+
+工作时调用共享 `RecipeProcessor`，所以独立阵和总线面遵循相同配方语义。空闲时使用较低唤醒频率；虚拟端口无连接时也降低扫描频率，避免大量总线组成网络后每 tick 扫描邻居。
+
+## 6. Tick 与形状
+
+`ZhenBusContainer.tickAll` 遍历服务端 Storage 中的全部处理器并调用 `tick`。总线组合形状按已安装方向合并 1/16 厚的面薄片：上、下、东、西、南、北各自拥有固定 VoxelShape。
+
+客户端不必拥有完整可执行处理器。`ZhenBusStorage.clientMarkers` 可仅记录哪些方向存在模块，以重建碰撞/选择形状。这种“服务端完整状态、客户端表现标记”的分离可降低同步内容，但所有客户端交互判断必须接受状态可能不完整。
+
+## 7. Capability 路由
+
+外部从某个方向查询总线 Capability 时，该世界方向同时承担两个作用：
+
+1. 定位该方向安装的 SideProcessor；
+2. 查询这个处理器在该世界方向暴露的 IO 槽位。
+
+物品和流体随后分别与处理器输入/输出槽求交集，构造 Linked Handler。没有处理器、没有对应 IO 组件、未暴露槽位或无有效权限时均返回 `null`。处理器添加与移除必须使 Capability 缓存失效。
+
+## 8. 持久化与延迟恢复
+
+`ZhenBusBlockEntity` 按六个方向创建子标签，每个处理器至少保存类型 ID 和 processing_time；非流体组件调用各自 `saveNBT`，流体使用包含 tank 索引的列表。
+
+加载存在两条路径：
+
+- 若 `level != null`，可立即从类型 Registry 创建处理器并恢复组件。
+- 若 `level == null`，先把必要数据复制到 `pendingNbt`，等 `onLoad` 获得世界后再反序列化。
+
+延迟恢复很重要，因为处理器构造需要 Level，类型查找需要注册表已经可用。恢复顺序应保持为“创建处理器→恢复进度和 IO→onAdd→绑定回调→写入 Storage”。客户端更新标签则可只重建方向标记和渲染所需状态。
+
+## 9. 虚拟端口
+
+每个通用处理器默认创建七个端口：`self` 指向安装面相邻方块的相对面，另有六个世界方向端口。`PortBinding` 描述从宿主哪一面寻找邻居，以及读取邻居哪个目标面。
+
+`VirtualPort.scanNeighbors` 当前只连接相邻 `ZhenBusBlockEntity`，并按绑定的 targetFace 取得处理器。连接结果会缓存，默认每 200 tick 刷新；强制扫描用于结构变化后立即更新。
+
+资源传输流程：
+
+1. 过滤拥有目标 IOType 组件的连接处理器。
+2. 按目标数量平均拆分资源，余数分给前几个目标。
+3. 调用目标组件的通用 `insert`。
+4. 累计所有拒绝量并返回。
+5. 源处理器根据返回的剩余量更新输出槽。
+
+当前数量分派只识别 `ItemStack`、`FluidStack` 和 `Integer`。新增 IO 类型必须扩展数量读取和重建逻辑，否则传输量会被解释为 0。
+
+## 10. 输出推送
+
+`AbstractSideProcessor.pushOutputsThroughPorts` 遍历 IO 组件：物品只推送输出物品槽，流体使用流体槽集合，能量走专门路径。对每个非空值依次尝试已连接端口，一旦某端口接受部分资源就更新源存储并停止本轮端口尝试。
+
+开发时需注意：
+
+- VirtualPort 返回值必须是未被接受部分；
+- 目标插入必须遵守模拟/实际语义；
+- 推送后要执行宿主变更回调；
+- 端口缓存失效与 Capability 缓存失效是两套机制；
+- `PortBinding` 的 inputZones/outputZones 当前是结构字段，实际传输主要由组件插入规则决定，扩展区域路由时需把字段真正接入过滤逻辑。
+
+## 11. 客户端渲染
+
+`MagicIOClient` 为阵总线方块实体注册 `ZhenBusBlockEntityRenderer`。渲染器根据同步状态为各方向提交面模型。服务端逻辑不能直接引用 renderer 或 Minecraft 客户端类；新增视觉状态时应：
+
+1. 在服务端状态变化时标记更新；
+2. 把最小表现数据写入更新标签或数据包；
+3. 客户端重建 `ZhenBusRenderState`；
+4. 渲染器只读取客户端状态，不执行配方或修改权威库存。
+
+## 12. 新增专用总线面模块
+
+1. 注册一个稳定的 `ZhenType`，明确它是否属于等级展开体系。
+2. 实现 `SideProcessor`，或继承通用处理器并只覆盖差异行为。
+3. 在处理器工厂分派处依据类型 ID 创建专用实现；当前该判断分别存在于容器添加和方块实体恢复路径，必须保持一致。
+4. 实现 NBT、更新数据、掉落、交互、形状和生命周期。
+5. 若暴露外部资源，确保 `getIOProcessor` 和 `getFaceAccess` 与 Capability 注册兼容。
+6. 结构改变后同时处理保存、客户端同步、Capability 失效和虚拟端口重扫。
+7. 验证放置、覆盖、拆除、区块卸载重载及专用服务端。
+
+## 13. 调试检查表
+
+- 某面不工作：确认 Storage 的方向、处理器类型和服务端 ticker。
+- 碰撞箱存在但处理器为空：区分客户端 marker 与服务端完整处理器。
+- 重载后库存丢失：核对 pendingNbt 路径和组件加载顺序。
+- 管道连到错误面：核对世界方向、安装方向和 targetFace 的相对关系。
+- 邻接总线不传输：强制端口扫描并检查目标是否真的有对应处理器和 IO 组件。
+- 拆除吞物品：确认 `addDrops` 与 `onRemove` 都被调用。
+- 替换后仍访问旧库存：确认执行了 `invalidateCapabilities`。
+- 客户端外观不刷新：确认结构变化调用 `markForUpdate` 并发送更新标签。
+
+## 14. 小结
+
+阵总线是方向化 SideProcessor 容器。Storage 管状态索引，Container 管生命周期，BlockEntity 管持久化和同步，Capability 管外部访问，VirtualPort 管内部邻接传输。扩展总线时必须把这五条链路作为一个整体验证，而不是只关注处理器的 tick 逻辑。

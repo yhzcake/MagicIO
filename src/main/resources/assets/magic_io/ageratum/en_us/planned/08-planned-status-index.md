@@ -1,3 +1,9 @@
+---
+title: "Planned Status Index"
+navigation:
+  title: "Chapter 8"
+---
+
 # Planned Status Index
 
 > [!CAUTION]
@@ -19,7 +25,7 @@ When the current-state and planned versions conflict, use the current-state vers
 | --- | --- | --- |
 | [World Progression](01-world-and-progression-path.md) | World presets, stage path, progression gates | Planned, not implemented |
 | [LV-0](02-lv-0-post-apocalyptic-survival.md) | Polluted dirt, stone blade, fire starting, clay furnace | Planned, not implemented |
-| [Arrays](03-array-system.md) | Drawing, activation, tiers, recipe execution | Planned, not implemented |
+| [Arrays](03-zhen-system.md) | Drawing, activation, tiers, recipe execution | Planned, not implemented |
 | [Elements](04-element-system.md) | Basic, composite, and advanced elements | Planned, not implemented |
 | [Power and Upgrades](05-power-and-upgrades.md) | AE, charcoal power, tiers, and modules | Planned, not implemented |
 | [Automation](06-automation-storage-and-logistics.md) | Storage, parallel processing, logistics, and orchestration | Planned, not implemented |

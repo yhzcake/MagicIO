@@ -1,3 +1,9 @@
+---
+title: "Grid Cells and Zhen Pattern Parsing"
+navigation:
+  title: "Chapter 5"
+---
+
 # Chapter 5: Grid Cells and Zhen Pattern Parsing
 
 ## 1. Two Grid Carriers

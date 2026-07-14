@@ -1,3 +1,9 @@
+---
+title: "LV-0: Post-Apocalyptic Survival"
+navigation:
+  title: "Chapter 2"
+---
+
 # LV-0: Post-Apocalyptic Survival
 
 > [!CAUTION]

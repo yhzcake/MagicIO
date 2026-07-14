@@ -1,0 +1,125 @@
+---
+title: "资源重载与网络同步"
+navigation:
+  title: "第八章"
+---
+
+# 第 08 章：资源重载与网络同步
+
+MagicIO 的阵配方以服务端为权威来源。客户端不自行扫描本地配方，而是等待服务端发送已经解析的 `ZhenRecipe` 列表。本章按源码说明启动、登录、`/reload` 和 JEI 刷新的完整时序。
+
+## 1. 服务端权威模型
+
+采用服务端权威有三个直接结果：
+
+- 单人游戏也由集成服务器加载配方。
+- 多人服务器的数据包决定真实配方内容。
+- 客户端缓存仅用于显示和客户端查询，不能决定机器执行结果。
+
+`MagicIOClient` 明确不预加载配方，以避免客户端注册表尚未就绪时产生错误缓存。配方加载集中在 `MagicIO` 的服务端事件与重载监听器中。
+
+## 2. 启动时序
+
+服务器启动时：
+
+1. `ServerStartingEvent` 触发 `onServerStarting`。
+2. `loadRecipesToManager` 清空 `ZhenRecipeManager`。
+3. `ResourceManager.listResources("recipe", ...)` 枚举 `magic_io` 命名空间的 JSON。
+4. 每个资源交给 `ZhenRecipeLoader` 解析。
+5. `ForgeRecipeBridge.injectFurnaceRecipes(server)` 注入熔炉桥接配方。
+6. 记录最终缓存数量。
+7. `syncRecipesToAll` 向当前在线玩家广播快照。
+
+玩家登录时，`PlayerLoggedInEvent` 把同步任务提交到服务器主线程。当前实现调用的是广播方法，因此一次玩家登录会向所有在线玩家重新发送完整列表，而不只是新玩家。
+
+## 3. `/reload` 时序
+
+`AddServerReloadListenersEvent` 注册 ID 为 `magic_io:zhen_recipes` 的 `ZhenRecipeReloadListener`。监听器继承 `SimplePreparableReloadListener<Void>`：
+
+- `prepare` 当前不解析数据，只返回 `null`。
+- `apply` 在应用阶段取得当前服务器，重新加载缓存并广播。
+- 客户端物理环境直接跳过服务端应用逻辑。
+
+因此当前 JSON 打开、Gson 解析和注册表校验都发生在 apply 阶段。数据量较小时实现简单；若未来配方数量显著增加，可考虑在 prepare 阶段读取不可变中间数据，在 apply 阶段只进行注册表相关解析与缓存替换。
+
+## 4. 网络注册
+
+`RegisterPayloadHandlersEvent` 中通过模组 registrar 注册：
+
+```java
+registrar.playToClient(
+    ZhenRecipeSyncPayload.TYPE,
+    ZhenRecipeSyncPayload.STREAM_CODEC,
+    ZhenRecipeSyncPayload::handle
+);
+```
+
+载荷类型 ID 是 `magic_io:zhen_recipe_sync`，方向限定为服务端到客户端。`ZhenRecipeSyncPayload.STREAM_CODEC` 先写配方数量，再逐个委托 `ZhenRecipeSerializer.STREAM_CODEC`。
+
+使用 `RegistryFriendlyByteBuf` 很重要，因为 Ingredient、HolderSet、FluidStack 等数据与注册表有关。不能在不核对语义的情况下换成普通字节缓冲区。
+
+## 5. 客户端处理
+
+客户端收到载荷后通过 `context.enqueueWork` 执行：
+
+1. 清空本地 `ZhenRecipeManager`。
+2. 顺序加入收到的所有配方。
+3. 记录接收数量。
+4. 调用 `MagicIOJeiPlugin.refreshFromCache()`。
+
+使用入队工作可以避免在网络线程直接修改共享客户端状态。刷新 JEI 前先完整替换缓存，确保 JEI 看到的是同一份快照。
+
+## 6. 编解码一致性
+
+网络数据顺序由 `ZhenRecipeSerializer.STREAM_CODEC` 定义，主要包括：
+
+1. 阵类型 `Identifier`。
+2. 物品输入区域数量、区域名和 Ingredient 列表。
+3. 物品输出区域数量、固定物品或战利品表判别标记。
+4. 流体输入区域及 `HolderSet + amount`。
+5. 流体输出区域及 `FluidStack`。
+6. `processing_time`。
+
+新增字段时必须同时更新编码和解码，并决定旧客户端与新服务端是否允许连接。只改 JSON Codec 不会自动改变网络 Codec。
+
+## 7. 空快照问题
+
+当前 `syncRecipesToAll` 在缓存为空时直接返回。这意味着服务器重载后若合法配方数量变成 0，客户端不会收到“清空缓存”的空列表，可能继续显示旧配方。
+
+开发与测试时应把这一点作为已知边界：
+
+- “服务器加载为 0”不等于“客户端已经清空”。
+- 验证删除全部配方的场景时，必须检查客户端缓存是否残留。
+- 若以后修正，应允许发送长度为 0 的权威快照，并让 JEI 隐藏旧条目。
+
+## 8. JEI 初始化竞态
+
+网络包与 JEI Runtime 的就绪顺序不固定，因此源码处理了两个方向：
+
+- 包先到：缓存先更新；JEI Runtime 尚为空时刷新直接返回，之后 `onRuntimeAvailable` 再从缓存刷新。
+- JEI 先到：初次注册发现缓存为空便等待；包到达后主动刷新。
+
+这种“双触发、同一缓存源”模式适合可选客户端集成。扩展 REI、EMI 或其他查看器时也应避免假定固定初始化顺序。
+
+## 9. 性能与安全
+
+- 同步的是完整配方列表，不是增量差异；配方很多时应关注包大小。
+- `Ingredient`、流体 HolderSet 和输出列表均可能膨胀，应限制不受信数据的集合规模。
+- 网络接收端不应执行配方，只更新客户端展示缓存。
+- 服务端重载必须先构造新结果，再考虑是否替换旧缓存；当前实现先清空，因此中途异常可能得到部分列表。
+- 登录广播给所有玩家虽然正确，但玩家数量大时存在重复流量，可改为只发给登录玩家。
+
+## 10. 调试清单
+
+1. 检查启动日志是否出现配方加载总数。
+2. 检查网络载荷是否完成注册。
+3. 玩家登录后检查服务端的同步数量日志。
+4. 客户端检查 `[Network] Received ... recipes from server`。
+5. 执行 `/reload`，确认先出现重新加载日志，再出现同步日志。
+6. 若客户端断线，重点核对 `STREAM_CODEC` 编解码顺序和注册表对象。
+7. 若客户端缓存正确但 JEI 不变，检查 JEI Runtime 是否可用及刷新逻辑。
+8. 若只在专用服务器失败，排查服务端代码是否意外加载 JEI/Jade 客户端类。
+
+## 11. 版本注意
+
+本项目针对 NeoForge 26.1 使用 `CustomPacketPayload`、`RegisterPayloadHandlersEvent` 和 `playToClient`。旧 Forge 教程中的 SimpleChannel、消息编号、自定义 `encode/decode/handle` 注册模板不能直接照搬。应始终以当前依赖源码和本项目既有注册方式为基准。

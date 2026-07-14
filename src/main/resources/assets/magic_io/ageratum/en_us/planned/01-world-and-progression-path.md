@@ -1,3 +1,9 @@
+---
+title: "World and Progression Path"
+navigation:
+  title: "Chapter 1"
+---
+
 # World and Progression Path
 
 > [!CAUTION]
@@ -69,4 +75,4 @@ Each progression tier should be driven by an observable and verifiable change in
 
 ## 6. Reading Order
 
-Read this chapter first, followed by [LV-0 Post-Apocalyptic Survival](02-lv-0-post-apocalyptic-survival.md), [Array System](03-array-system.md), [Element System](04-element-system.md), [Power and Upgrades](05-power-and-upgrades.md), [Automation](06-automation-storage-and-logistics.md), and [Advanced Era and Endgame](07-advanced-era-and-elemental-endgame.md). Finally, use the [Status Index](08-planned-status-index.md) to distinguish plans from the current state.
+Read this chapter first, followed by [LV-0 Post-Apocalyptic Survival](02-lv-0-post-apocalyptic-survival.md), [Array System](03-zhen-system.md), [Element System](04-element-system.md), [Power and Upgrades](05-power-and-upgrades.md), [Automation](06-automation-storage-and-logistics.md), and [Advanced Era and Endgame](07-advanced-era-and-elemental-endgame.md). Finally, use the [Status Index](08-planned-status-index.md) to distinguish plans from the current state.

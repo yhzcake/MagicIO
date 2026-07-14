@@ -1,3 +1,9 @@
+---
+title: "JEI and Jade Integration"
+navigation:
+  title: "Chapter 9"
+---
+
 # Chapter 09: JEI and Jade Integration
 
 MagicIO declares both JEI and Jade as optional dependencies. JEI displays zhen recipes, while Jade observes the state, items, and fluids on each zhen bus side. Both must follow the rule “enable when present, do not affect core mod loading when absent.”

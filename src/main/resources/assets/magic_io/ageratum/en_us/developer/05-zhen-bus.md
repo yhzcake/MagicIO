@@ -1,3 +1,9 @@
+---
+title: "Zhen Bus"
+navigation:
+  title: "Chapter 5"
+---
+
 # Chapter 05: Zhen Bus
 
 ## 1. Design Goals

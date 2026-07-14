@@ -1,3 +1,9 @@
+---
+title: "Java Registry System"
+navigation:
+  title: "Chapter 2"
+---
+
 # Chapter 02: Java Registry System
 
 ## 1. Registry Overview

@@ -1,3 +1,9 @@
+---
+title: "Project Status and Reading Scope"
+navigation:
+  title: "Chapter 1"
+---
+
 # Chapter 1: Project Status and Reading Scope
 
 ## 1. Basis of This Tutorial

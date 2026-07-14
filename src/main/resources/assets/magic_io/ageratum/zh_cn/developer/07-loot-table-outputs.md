@@ -1,0 +1,130 @@
+---
+title: "战利品表输出"
+navigation:
+  title: "第七章"
+---
+
+# 第 07 章：战利品表输出
+
+MagicIO 允许阵配方把固定物品与随机战利品表混合为输出。随机结果只在服务端真正完成配方时生成；JEI 中显示的概率信息则由客户端侧的轻量解析器估算，两者用途和能力不同。
+
+## 1. 运行时结构
+
+物品输出的最小单元是 `OutputEntry`：
+
+- `OutputEntry.item(ItemStack)` 表示固定物品。
+- `OutputEntry.lootTable(Identifier)` 表示对指定战利品表进行一次求值。
+- `isLootTable()` 用来区分两种形式。
+- `roll(ServerLevel)` 返回本次实际产生的物品列表。
+
+`ZhenRecipe.rollOutput` 会按输出区域遍历这些条目，固定物品复制后加入结果，战利品条目则调用 `OutputEntry.roll`。因此同一个输出区域可以同时包含固定物品和多个战利品表。
+
+## 2. 配方中的推荐写法
+
+```json
+"outputs": {
+  "item_output_all": [
+    {"item": "minecraft:dirt", "count": 1}
+  ],
+  "drop_output": [
+    {"loot_table": "magic_io:sift_metal_drop"}
+  ]
+}
+```
+
+这里固定产物进入机器输出区，随机产物进入 `drop_output`。`RecipeProcessor.handleDropOutput` 会查找哪个方位开放了该区域，然后在相应方向生成 `ItemEntity`；若调用者要求中心掉落，则改在方块中心附近生成。
+
+## 3. 战利品表文件
+
+项目资源目录使用当前版本的单数路径：
+
+```text
+src/main/resources/data/magic_io/loot_table/random_treasure.json
+```
+
+示例结构：
+
+```json
+{
+  "type": "minecraft:empty",
+  "pools": [
+    {
+      "rolls": 1,
+      "entries": [
+        {"type": "minecraft:item", "weight": 10, "name": "minecraft:diamond"},
+        {"type": "minecraft:item", "weight": 20, "name": "minecraft:iron_ingot"}
+      ]
+    }
+  ]
+}
+```
+
+权重不是百分比。以上两项的总权重为 30，钻石每次抽取概率为 `10 / 30`，铁锭为 `20 / 30`。增加或删除同池条目会改变所有条目的实际概率。
+
+## 4. 服务端求值
+
+区域化 `outputs[].loot_table` 在加载时构造战利品输出条目，实际表解析和抽取发生在配方完成阶段。无效引用通常在实际滚动时暴露，因此数据包测试应覆盖对应战利品表。
+
+`OutputEntry.roll` 使用：
+
+```java
+new LootParams.Builder(level).create(LootContextParamSets.EMPTY)
+```
+
+这意味着当前战利品表按空上下文执行，没有玩家、工具、方块位置、实体或幸运值参数。依赖这些上下文参数的条件与函数不适合直接用于当前阵输出。
+
+安全设计原则：
+
+- 使用不依赖外部上下文的条目、权重和数量函数。
+- 不假设能读取击杀者、工具附魔或方块状态。
+- 条件导致空结果时，配方仍可能完成并消耗输入。
+- 随机输出应在输出空间预检阶段完成滚动，避免预检和真实产出使用两次不同随机结果。
+
+## 5. JEI 概率展示
+
+`LootTableParser` 不调用服务端战利品系统，而是从 classpath 读取：
+
+```text
+data/<namespace>/loot_table/<path>.json
+```
+
+它当前能展开：
+
+- `minecraft:item` 条目。
+- `minecraft:tag` 条目。
+- 整数或可解析的 `rolls`。
+- 条目 `weight`。
+
+它会计算每项期望数量，并生成“每次期望值”和“抽取次数 × 概率”的提示文本。`ZhenRecipeCategory` 收集所有战利品输出，按物品类型合并，再交给 JEI 的滚动网格显示。
+
+必须认识到该解析器是展示近似，而不是完整战利品解释器。它没有完整处理条件、quality、复杂 entry、嵌套表、函数改变的数量以及运行时上下文。因此复杂表可能在游戏中正确运行，却无法在 JEI 中完整显示。
+
+## 6. 数据包与资源包差异
+
+服务端运行时通过可重载注册表读取战利品表，因此服务器数据包覆盖可以影响真实产出。客户端 JEI 解析器通过类加载器读取打包资源，不会天然看到服务器临时数据包中的 JSON。
+
+由此可能出现：
+
+- 服务端随机结果已经被数据包修改。
+- 客户端收到的配方只携带战利品表 ID。
+- JEI 仍按模组 jar 内的旧表展示，或完全找不到外部表。
+
+这是当前架构的能力边界，不应把 JEI 展示值当作服务端权威结果。若将来要求精确展示，应在服务端重载时解析为专用展示快照，再通过网络同步，而不是让客户端猜测服务端资源。
+
+## 7. 调试步骤
+
+1. 检查路径是否为 `data/<namespace>/loot_table/<path>.json`。
+2. 检查配方引用 ID 是否省略 `.json` 且命名空间正确。
+3. 执行 `/reload`，先确认配方没有被顶层校验逻辑丢弃。
+4. 开启相关日志后观察 `OutputEntry.roll` 是否找到目标表及滚出了多少项。
+5. 若实际无产出，先用纯物品、无条件、单池战利品表缩小问题范围。
+6. 若实际产出正确但 JEI 空白，检查条目是否超出 `LootTableParser` 支持范围，或资源是否只存在于服务端数据包。
+7. 若掉落方向错误，检查 `drop_output` 是否暴露在预期方位及 `zoneFaceAccess` 配置。
+
+## 8. 兼容建议
+
+- 对外公开的战利品表 ID 应保持稳定，让数据包可以覆盖而无需替换配方。
+- 第三方模组物品应直接使用其注册 ID，不要通过 Java 类引用建立硬依赖。
+- 引用可选模组物品时，要考虑该模组缺失后条目解析和配方加载的行为。
+- 复杂条件表需要同时验证专用服务器实际求值和 JEI 展示降级。
+- 不要在客户端自行滚动真实奖励，权威随机结果必须由服务端产生。

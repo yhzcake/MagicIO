@@ -1,3 +1,9 @@
+---
+title: "Power and Upgrades"
+navigation:
+  title: "Chapter 5"
+---
+
 # Power and Upgrades
 
 > [!CAUTION]

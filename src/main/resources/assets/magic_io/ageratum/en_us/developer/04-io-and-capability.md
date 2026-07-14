@@ -1,3 +1,9 @@
+---
+title: "IO and Capability"
+navigation:
+  title: "Chapter 4"
+---
+
 # Chapter 04: IO and Capability
 
 ## 1. Two Abstraction Layers

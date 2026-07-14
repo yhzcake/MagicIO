@@ -55,6 +55,7 @@ import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.component.CustomData;
 import net.neoforged.bus.api.IEventBus;
 import net.neoforged.bus.api.SubscribeEvent;
+import net.neoforged.fml.ModList;
 import net.neoforged.fml.common.Mod;
 import net.neoforged.fml.event.lifecycle.FMLCommonSetupEvent;
 import net.neoforged.neoforge.capabilities.BlockCapability;
@@ -84,6 +85,7 @@ public class MagicIO {
 
     public static final DeferredItem<Item> COAL_COKE = ITEMS.registerSimpleItem("coal_coke");
     public static final DeferredItem<Item> EXAMPLE_ITEM = ITEMS.registerSimpleItem("example_item");
+    public static @Nullable DeferredItem<Item> AGERATUM_GUIDEBOOK;
 
     public static final DeferredItem<BlockItem> ZHEN_BUS_ITEM = ITEMS.registerSimpleBlockItem("zhen_bus", ModZhenBusBlocks.ZHEN_BUS);
     public static final DeferredItem<BlockItem> GRID_CELL_PANEL_ITEM = ITEMS.registerSimpleBlockItem("grid_cell_panel", ModBlocks.GRID_CELL_PANEL);
@@ -99,6 +101,9 @@ public class MagicIO {
                 }
                 output.accept(ZHEN_BUS_ITEM.get());
                 output.accept(GRID_CELL_PANEL_ITEM.get());
+                if (AGERATUM_GUIDEBOOK != null) {
+                    output.accept(AGERATUM_GUIDEBOOK.get());
+                }
             }).build());
 
     public MagicIO(IEventBus modEventBus) {
@@ -114,6 +119,10 @@ public class MagicIO {
 
         ModBlocks.registerZhenBlocks(MagicIO.BLOCKS);
         ModBlocks.registerZhenBlockItems(MagicIO.ITEMS);
+
+        if (ModList.get().isLoaded("ageratum")) {
+            AGERATUM_GUIDEBOOK = ITEMS.registerSimpleItem("ageratum_guidebook");
+        }
 
         MagicIO.BLOCKS.register(modEventBus);
         MagicIO.ITEMS.register(modEventBus);

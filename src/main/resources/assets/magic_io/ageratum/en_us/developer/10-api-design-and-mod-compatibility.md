@@ -1,3 +1,9 @@
+---
+title: "API Design and Mod Compatibility"
+navigation:
+  title: "Chapter 10"
+---
+
 # Chapter 10: API Design and Mod Compatibility
 
 MagicIO currently has no separately published `api` source set or stable API artifact, but the source already provides several extension points: custom registries, zhen function descriptions, IO abstractions, recipe modifiers, grid actions, and parsing rules. This chapter distinguishes “currently usable extension points” from “internal implementations not yet promised to be stable.”

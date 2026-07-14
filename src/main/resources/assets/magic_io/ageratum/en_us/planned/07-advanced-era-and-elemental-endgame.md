@@ -1,3 +1,9 @@
+---
+title: "Advanced Era and Elemental Endgame"
+navigation:
+  title: "Chapter 7"
+---
+
 # Advanced Era and Elemental Endgame
 
 > [!CAUTION]

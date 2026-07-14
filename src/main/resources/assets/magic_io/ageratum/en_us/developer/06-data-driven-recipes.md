@@ -1,3 +1,9 @@
+---
+title: "Data-Driven Recipes"
+navigation:
+  title: "Chapter 6"
+---
+
 # Chapter 06: Data-Driven Recipes
 
 This chapter explains the zhen recipe system in the current MagicIO 26.1 source code. Here, “data-driven” does not mean delegating all work directly to the vanilla `RecipeManager`. Instead, the server scans data-pack resources, parses them into `ZhenRecipe` objects, stores them in a separate cache, and synchronizes them to clients. Extensions must follow this actual pipeline.

@@ -1,3 +1,9 @@
+---
+title: "Element System"
+navigation:
+  title: "Chapter 4"
+---
+
 # Element System
 
 > [!CAUTION]

@@ -1,3 +1,9 @@
+---
+title: "Loot Table Outputs"
+navigation:
+  title: "Chapter 7"
+---
+
 # Chapter 07: Loot Table Outputs
 
 MagicIO allows zhen recipes to mix fixed items and random loot tables as outputs. Random results are generated only on the server when a recipe actually completes; probability information displayed in JEI is estimated by a lightweight client-side parser. These serve different purposes and have different capabilities.

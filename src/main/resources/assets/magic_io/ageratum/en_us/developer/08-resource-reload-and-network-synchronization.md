@@ -1,3 +1,9 @@
+---
+title: "Resource Reload and Network Synchronization"
+navigation:
+  title: "Chapter 8"
+---
+
 # Chapter 08: Resource Reload and Network Synchronization
 
 MagicIO's zhen recipes use the server as their authoritative source. Clients do not scan local recipes themselves; they wait for the server to send an already parsed list of `ZhenRecipe` objects. This chapter follows the source code to explain the complete startup, login, `/reload`, and JEI refresh sequence.
