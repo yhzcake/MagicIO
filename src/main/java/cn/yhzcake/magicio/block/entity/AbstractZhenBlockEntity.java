@@ -20,9 +20,7 @@ import cn.yhzcake.magicio.io.IOType;
 import cn.yhzcake.magicio.io.ItemIOComponent;
 import cn.yhzcake.magicio.io.ModIOTypes;
 import cn.yhzcake.magicio.item.ModDataComponents;
-import cn.yhzcake.magicio.item.crafting.RecipeInput;
 import cn.yhzcake.magicio.item.crafting.RecipeProcessor;
-import cn.yhzcake.magicio.item.crafting.ZhenRecipe;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.core.NonNullList;
@@ -42,7 +40,6 @@ import net.minecraft.world.inventory.AbstractContainerMenu;
 import net.minecraft.world.inventory.RecipeCraftingHolder;
 import net.minecraft.world.inventory.StackedContentsCompatible;
 import net.minecraft.world.item.ItemStack;
-import net.minecraft.world.item.crafting.Ingredient;
 import net.neoforged.neoforge.fluids.FluidStack;
 import net.minecraft.world.item.crafting.RecipeHolder;
 import net.minecraft.world.level.Level;
@@ -51,7 +48,6 @@ import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.storage.ValueInput;
 import net.minecraft.world.level.storage.ValueOutput;
 
-@SuppressWarnings({"unchecked"})
 public abstract class AbstractZhenBlockEntity extends BaseContainerBlockEntity implements WorldlyContainer, RecipeCraftingHolder, StackedContentsCompatible {
 
     // 字段
@@ -67,6 +63,8 @@ public abstract class AbstractZhenBlockEntity extends BaseContainerBlockEntity i
     private FluidIOComponent fluidIOComponent;
     private EnergyIOComponent energyIOComponent;
     private final @Nullable Integer energyCapacity;
+    private @Nullable Identifier pendingCurrentRecipeId;
+    private @Nullable Identifier pendingLastValidRecipeId;
 
     // 构造函数
     protected AbstractZhenBlockEntity(BlockPos worldPosition, BlockState blockState) {
@@ -87,10 +85,12 @@ public abstract class AbstractZhenBlockEntity extends BaseContainerBlockEntity i
     private void initIOComponents() {
         ItemIOComponent itemIO = new ItemIOComponent(items, partition);
         fluidIOComponent = new FluidIOComponent(tanks, partition, tankCapacity);
-        energyIOComponent = new EnergyIOComponent(energyCapacity != null ? energyCapacity : 0, energyCapacity != null ? 1 : 0);
+        if (energyCapacity != null) {
+            energyIOComponent = new EnergyIOComponent(energyCapacity, 1);
+            ioProcessor.register(energyIOComponent);
+        }
         ioProcessor.register(itemIO);
         ioProcessor.register(fluidIOComponent);
-        ioProcessor.register(energyIOComponent);
         ioProcessor.registerChangeCallback(() -> {
             setChanged();
             state.inputsChanged = true;
@@ -107,6 +107,10 @@ public abstract class AbstractZhenBlockEntity extends BaseContainerBlockEntity i
 
     public FluidIOComponent getFluidIOComponent() {
         return fluidIOComponent;
+    }
+
+    public cn.yhzcake.magicio.item.crafting.ProcessingStateSnapshot getProcessingStateSnapshot() {
+        return RecipeProcessor.snapshot(state);
     }
 
     // ===== 容器基础方法 =====
@@ -240,6 +244,10 @@ public abstract class AbstractZhenBlockEntity extends BaseContainerBlockEntity i
         return faceAccessController.getFaceSlotsForType(ModIOTypes.FLUID.get());
     }
 
+    public Map<Direction, Set<Integer>> getEnergyFaceAccess() {
+        return faceAccessController.getFaceSlotsForType(ModIOTypes.ENERGY.get());
+    }
+
     public void setItemFaceAccess(Map<Direction, Set<Integer>> faceAccess) {
         faceAccessController.setItemFaceAccess(faceAccess);
     }
@@ -329,67 +337,15 @@ public abstract class AbstractZhenBlockEntity extends BaseContainerBlockEntity i
 
     // ===== 物品插入提取 =====
     public ItemStack insertItem(SlotZone zone, ItemStack stack, boolean simulate) {
-        if (stack.isEmpty()) return ItemStack.EMPTY;
-
-        ItemStack remaining = stack.copy();
-        Set<Integer> slots = partition.getSlots(ModIOTypes.ITEM.get(), zone);
-
-        for (int slot : slots) {
-            if (remaining.isEmpty()) break;
-            ItemStack existing = items.get(slot);
-            if (ItemStack.isSameItemSameComponents(existing, remaining)) {
-                int canInsert = Math.min(remaining.getCount(), existing.getMaxStackSize() - existing.getCount());
-                if (canInsert > 0) {
-                    if (!simulate) {
-                        existing.grow(canInsert);
-                        setChanged();
-                    }
-                    remaining.shrink(canInsert);
-                }
-            }
-        }
-
-        for (int slot : slots) {
-            if (remaining.isEmpty()) break;
-            ItemStack existing = items.get(slot);
-            if (existing.isEmpty()) {
-                ItemStack placed = remaining.split(remaining.getCount());
-                if (!simulate) {
-                    items.set(slot, placed);
-                    setChanged();
-                }
-            }
-        }
-
-        return remaining.isEmpty() ? ItemStack.EMPTY : remaining;
+        return getItemIOComponent().insertItem(zone, stack, simulate);
     }
 
     public ItemStack extractItem(SlotZone zone, int slot, int amount, boolean simulate) {
-        Set<Integer> slots = partition.getSlots(ModIOTypes.ITEM.get(), zone);
-        if (!slots.contains(slot) || amount <= 0) return ItemStack.EMPTY;
-        ItemStack existing = items.get(slot);
-        if (existing.isEmpty()) return ItemStack.EMPTY;
-        int extracted = Math.min(amount, existing.getCount());
-        ItemStack result = existing.copyWithCount(extracted);
-        if (!simulate) {
-            existing.shrink(extracted);
-            if (existing.isEmpty()) {
-                items.set(slot, ItemStack.EMPTY);
-            }
-            setChanged();
-        }
-        return result;
+        return getItemIOComponent().extractItem(zone, slot, amount, simulate);
     }
 
     public ItemStack extractItem(SlotZone zone, int amount, boolean simulate) {
-        if (amount <= 0) return ItemStack.EMPTY;
-        for (int slot : partition.getSlots(ModIOTypes.ITEM.get(), zone)) {
-            ItemStack existing = items.get(slot);
-            if (!existing.isEmpty()) {
-                return extractItem(zone, slot, Math.min(amount, existing.getCount()), simulate);
-            }
-        }
-        return ItemStack.EMPTY;
+        return getItemIOComponent().extractItem(zone, amount, simulate);
     }
 
     // ===== 流体 Zone 查询 =====
@@ -493,47 +449,8 @@ public abstract class AbstractZhenBlockEntity extends BaseContainerBlockEntity i
         return true;
     }
 
-    public boolean canConsumeFluid(SlotZone zone, ZhenRecipe.FluidIngredient ingredient) {
-        if (ingredient == null || ingredient.amount() <= 0) return false;
-        for (int tank : partition.getSlots(ModIOTypes.FLUID.get(), zone)) {
-            if (ingredient.test(tanks.get(tank))) {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    public boolean canConsumeAllFluids(ZhenRecipe recipe) {
-        for (RecipeInput<?> input : recipe.getInputs()) {
-            if (input.type() != ModIOTypes.FLUID.get()) continue;
-            SlotZone zone = partition.getZoneByName(input.zoneName());
-            if (zone == null) return false;
-            NonNullList<ZhenRecipe.FluidIngredient> ingredients = (NonNullList<ZhenRecipe.FluidIngredient>) input.requirement();
-            for (ZhenRecipe.FluidIngredient fluid : ingredients) {
-                if (!canConsumeFluid(zone, fluid)) return false;
-            }
-        }
-        return true;
-    }
-
-    public void consumeFluid(SlotZone zone, NonNullList<ZhenRecipe.FluidIngredient> ingredients) {
-        for (ZhenRecipe.FluidIngredient ingredient : ingredients) {
-            for (int tank : partition.getSlots(ModIOTypes.FLUID.get(), zone)) {
-                FluidStack existing = tanks.get(tank);
-                if (ingredient.test(existing)) {
-                    extractFluid(zone, tank, ingredient.amount(), false);
-                    break;
-                }
-            }
-        }
-    }
-
     public void produceFluid(SlotZone zone, NonNullList<FluidStack> fluids) {
-        for (FluidStack fluid : fluids) {
-            if (!fluid.isEmpty()) {
-                insertFluid(zone, fluid.copy(), false);
-            }
-        }
+        fluidIOComponent.produceFluid(zone, fluids);
     }
 
     // ===== 配方处理 =====
@@ -560,25 +477,6 @@ public abstract class AbstractZhenBlockEntity extends BaseContainerBlockEntity i
         return true;
     }
 
-    public boolean canConsumeItem(NonNullList<Ingredient> ingredients) {
-        return canConsumeItem(SlotZone.ITEM_INPUT_ALL, ingredients);
-    }
-
-    public boolean canConsumeItem(SlotZone zone, NonNullList<Ingredient> ingredients) {
-        for (Ingredient ingredient : ingredients) {
-            boolean found = false;
-            for (int slot : partition.getSlots(ModIOTypes.ITEM.get(), zone)) {
-                ItemStack simulated = extractItem(zone, slot, 1, true);
-                if (!simulated.isEmpty() && ingredient.test(simulated)) {
-                    found = true;
-                    break;
-                }
-            }
-            if (!found) return false;
-        }
-        return true;
-    }
-
     public void produceItem(NonNullList<ItemStack> outputs) {
         for (ItemStack output : outputs) {
             if (!output.isEmpty()) {
@@ -597,70 +495,15 @@ public abstract class AbstractZhenBlockEntity extends BaseContainerBlockEntity i
 
     // ===== Tick =====
     public static void serverTick(Level level, BlockPos pos, BlockState state, AbstractZhenBlockEntity be) {
-        boolean needSync = RecipeProcessor.processTick(
+        be.resolvePendingRecipes();
+        RecipeProcessor.processTick(
                 level, pos, be.state, be.type.getType(),
                 be.partition, be.items, be.tanks,
                 be.ioProcessor, be.faceAccessController.getZoneFaceAccess(),
                 false,
                 be::setChanged);
 
-        if (needSync) {
-            level.sendBlockUpdated(pos, state, state, 3);
-        }
-
         be.type.execute(level, pos, state, be);
-    }
-
-    public boolean hasItemIngredients(NonNullList<Ingredient> ingredients) {
-        return hasItemIngredients(SlotZone.ITEM_INPUT_ALL, ingredients);
-    }
-
-    public boolean hasItemIngredients(SlotZone zone, NonNullList<Ingredient> ingredients) {
-        if (ingredients.isEmpty()) return true;
-
-        Set<Integer> slots = partition.getSlots(ModIOTypes.ITEM.get(), zone);
-
-        for (Ingredient ingredient : ingredients) {
-            boolean found = false;
-            for (int slot : slots) {
-                if (ingredient.test(items.get(slot))) {
-                    found = true;
-                    break;
-                }
-            }
-            if (!found) return false;
-        }
-        return true;
-    }
-
-    public boolean consumeItem(NonNullList<Ingredient> ingredients) {
-        return consumeItem(SlotZone.ITEM_INPUT_ALL, ingredients);
-    }
-
-    public boolean consumeItem(SlotZone zone, NonNullList<Ingredient> ingredients) {
-        if (ingredients.isEmpty()) return true;
-
-        Set<Integer> slots = partition.getSlots(ModIOTypes.ITEM.get(), zone);
-
-        for (Ingredient ingredient : ingredients) {
-            boolean consumed = false;
-            for (int slot : slots) {
-                ItemStack existing = items.get(slot);
-                if (ingredient.test(existing)) {
-                    existing.shrink(1);
-                    if (existing.isEmpty()) {
-                        items.set(slot, ItemStack.EMPTY);
-                    }
-                    consumed = true;
-                    break;
-                }
-            }
-            if (!consumed) return false;
-        }
-
-        setChanged();
-        state.inputsChanged = true;
-        return true;
     }
 
     public NonNullList<FluidStack> getFluidTanks() {
@@ -684,6 +527,18 @@ public abstract class AbstractZhenBlockEntity extends BaseContainerBlockEntity i
     protected void saveAdditional(ValueOutput output) {
         super.saveAdditional(output);
         output.putInt("process_time", state.processTime);
+        output.putInt("effective_processing_time", state.effectiveProcessingTime);
+        output.putDouble("output_multiplier", state.outputMultiplier);
+        output.putInt("recipe_generation", state.recipeGeneration);
+        output.putLong("state_revision", state.stateRevision);
+        output.putLong("cycle_id", state.cycleId);
+        output.putBoolean("output_blocked", state.outputBlocked);
+        if (state.currentRecipe != null) {
+            output.putString("current_recipe_id", state.currentRecipe.getRecipeId().toString());
+        }
+        if (state.lastValidRecipe != null) {
+            output.putString("last_valid_recipe_id", state.lastValidRecipe.getRecipeId().toString());
+        }
         for (IOComponent<?, ?> component : ioProcessor.getAll()) {
             component.saveNBT(output);
         }
@@ -692,9 +547,57 @@ public abstract class AbstractZhenBlockEntity extends BaseContainerBlockEntity i
     @Override
     protected void loadAdditional(ValueInput input) {
         super.loadAdditional(input);
+        if (level != null && level.isClientSide()) {
+            state.processTime = input.getIntOr("process_time", 0);
+            return;
+        }
         state.processTime = input.getIntOr("process_time", 0);
+        state.effectiveProcessingTime = input.getIntOr("effective_processing_time", 0);
+        state.outputMultiplier = input.getDoubleOr("output_multiplier", 1.0);
+        state.recipeGeneration = input.getIntOr("recipe_generation", 0);
+        state.stateRevision = input.getLongOr("state_revision", 0);
+        state.cycleId = input.getLongOr("cycle_id", 0);
+        state.outputBlocked = input.getBooleanOr("output_blocked", false);
+        input.getString("current_recipe_id").ifPresent(idStr -> {
+            try {
+                pendingCurrentRecipeId = Identifier.parse(idStr);
+            } catch (Exception ignored) {}
+        });
+        input.getString("last_valid_recipe_id").ifPresent(idStr -> {
+            try {
+                pendingLastValidRecipeId = Identifier.parse(idStr);
+            } catch (Exception ignored) {}
+        });
+        state.inputsChanged = true;
+        resolvePendingRecipes();
         for (IOComponent<?, ?> component : ioProcessor.getAll()) {
             component.loadNBT(input);
+        }
+    }
+
+    private void resolvePendingRecipes() {
+        if (pendingCurrentRecipeId == null && pendingLastValidRecipeId == null) return;
+        var manager = cn.yhzcake.magicio.item.crafting.ZhenRecipeManager.getInstance();
+        if (!manager.isLoaded()) return;
+        if (pendingCurrentRecipeId != null) {
+            state.currentRecipe = manager.getRecipe(pendingCurrentRecipeId);
+            pendingCurrentRecipeId = null;
+        }
+        if (pendingLastValidRecipeId != null) {
+            state.lastValidRecipe = manager.getRecipe(pendingLastValidRecipeId);
+            pendingLastValidRecipeId = null;
+        }
+        if (state.currentRecipe != null) {
+            RecipeProcessor.computeEffectiveValues(state, type.getType());
+            if (state.recipeGeneration != cn.yhzcake.magicio.item.crafting.ZhenRecipeManager.getRecipeGeneration()) {
+                state.inputsChanged = true;
+                state.recipeGeneration = cn.yhzcake.magicio.item.crafting.ZhenRecipeManager.getRecipeGeneration();
+            }
+        } else if (pendingCurrentRecipeId == null) {
+            state.processTime = 0;
+            state.effectiveProcessingTime = 0;
+            state.outputBlocked = false;
+            state.stateRevision++;
         }
     }
 
@@ -702,9 +605,7 @@ public abstract class AbstractZhenBlockEntity extends BaseContainerBlockEntity i
     public CompoundTag getUpdateTag(HolderLookup.Provider registries) {
         CompoundTag tag = super.getUpdateTag(registries);
         tag.putInt("process_time", state.processTime);
-        if (state.currentRecipe != null) {
-            tag.putString("current_recipe", state.currentRecipe.getZhenTypeStr());
-        }
+        tag.putBoolean("has_recipe", state.currentRecipe != null);
         return tag;
     }
 

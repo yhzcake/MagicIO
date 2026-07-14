@@ -2,10 +2,20 @@
   "type": "magic_io:zhen_block",
   "zhen_type": "magic_io:archaic_haste_zhen",
   "inputs": {
-    "item_input_all": [{"item": "minecraft:clock", "count": 1}]
+    "item_input_all": [
+      {
+        "count": 1,
+        "item": "minecraft:clock"
+      }
+    ]
   },
   "outputs": {
-    "item_output_all": [{"item": "minecraft:redstone_block", "count": 2}]
+    "item_output_all": [
+      {
+        "item": "minecraft:redstone_block",
+        "count": 2
+      }
+    ]
   },
   "processing_time": 200
 }

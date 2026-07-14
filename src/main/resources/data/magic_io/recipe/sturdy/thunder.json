@@ -2,10 +2,20 @@
   "type": "magic_io:zhen_block",
   "zhen_type": "magic_io:sturdy_thunder_zhen",
   "inputs": {
-    "item_input_all": [{"item": "minecraft:iron_ingot", "count": 2}]
+    "item_input_all": [
+      {
+        "count": 2,
+        "item": "minecraft:iron_ingot"
+      }
+    ]
   },
   "outputs": {
-    "item_output_all": [{"item": "minecraft:compass", "count": 1}]
+    "item_output_all": [
+      {
+        "item": "minecraft:compass",
+        "count": 1
+      }
+    ]
   },
   "processing_time": 200
 }

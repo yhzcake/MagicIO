@@ -82,6 +82,16 @@ public class ZhenTypes {
         }
     }
 
+    public static ZhenType getTypeStrict(String name) {
+        if (name == null || name.isEmpty() || ZhenType.ZHEN_TYPES == null) return null;
+        try {
+            Identifier id = name.contains(":") ? Identifier.parse(name) : Identifier.fromNamespaceAndPath(MagicIO.MOD_ID, name);
+            return ZhenType.ZHEN_TYPES.get(id).map(Reference::value).orElse(null);
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
     public static ZhenType getType(Identifier location) {
         if (location == null || ZhenType.ZHEN_TYPES == null) return getFallback();
         try {

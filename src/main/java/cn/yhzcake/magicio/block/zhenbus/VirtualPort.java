@@ -1,8 +1,14 @@
 package cn.yhzcake.magicio.block.zhenbus;
 
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 
+import cn.yhzcake.magicio.block.inventory.SlotPartition;
+import cn.yhzcake.magicio.block.inventory.SlotZone;
+import cn.yhzcake.magicio.io.AbstractSideProcessor;
 import cn.yhzcake.magicio.io.IOComponent;
 import cn.yhzcake.magicio.io.IOType;
 import cn.yhzcake.magicio.io.SideProcessor;
@@ -17,7 +23,7 @@ public class VirtualPort {
     private final String name;
     private final List<PortBinding> bindings;
 
-    private List<SideProcessor> connectedProcessors = List.of();
+    private List<Connection> connections = List.of();
     private long lastScanTick = -1;
     private static final long SCAN_INTERVAL = 200;
 
@@ -35,15 +41,15 @@ public class VirtualPort {
     }
 
     public boolean hasDirectConnection() {
-        return !connectedProcessors.isEmpty();
+        return !connections.isEmpty();
     }
 
     /** 将 value 平均分给所有能接受该类型的邻居。返回未能推送的部分。 */
     public <T> T transfer(T value, IOType type, boolean simulate) {
-        List<SideProcessor> targets = new ArrayList<>();
-        for (SideProcessor sp : connectedProcessors) {
-            if (sp.getIOProcessor().get(type) != null) {
-                targets.add(sp);
+        List<Connection> targets = new ArrayList<>();
+        for (Connection connection : connections) {
+            if (getInsertSlots(connection, type).length > 0) {
+                targets.add(connection);
             }
         }
         if (targets.isEmpty()) return value;
@@ -53,7 +59,7 @@ public class VirtualPort {
 
     /** 将值均分给所有目标，返回被拒绝的总量。 */
     @SuppressWarnings({"unchecked", "rawtypes"})
-    private static <T> T transferSplit(T value, List<SideProcessor> targets, IOType type, boolean simulate) {
+    private static <T> T transferSplit(T value, List<Connection> targets, IOType type, boolean simulate) {
         int total = getAmount(value);
         int n = targets.size();
         int each = total / n;
@@ -64,13 +70,61 @@ public class VirtualPort {
             int amount = each + (i < rem ? 1 : 0);
             if (amount <= 0) continue;
             T portion = (T) withAmount(value, amount);
-            IOComponent raw = (IOComponent) targets.get(i).getIOProcessor().get(type);
+            Connection connection = targets.get(i);
+            IOComponent raw = validateAndGetComponent(connection, type);
             if (raw == null) { rejectedTotal += amount; continue; }
-            Object left = raw.insert(portion, simulate);
+            Object left = insert(raw, portion, getInsertSlots(connection, type), simulate);
             rejectedTotal += getAmount(left);
         }
 
         return (T) withAmount(value, rejectedTotal);
+    }
+
+    /** 验证目标处理器是否仍然有效（未被替换/移除），并返回对应类型的 IOComponent */
+    private static IOComponent<?,?> validateAndGetComponent(Connection connection, IOType type) {
+        SideProcessor target = connection.processor();
+        BlockPos targetPos = target.getPos();
+        Level targetLevel = target.getLevel();
+        if (targetLevel == null || !targetLevel.isLoaded(targetPos)) return null;
+        BlockEntity be = targetLevel.getBlockEntity(targetPos);
+        if (!(be instanceof ZhenBusBlockEntity zhenBus)) return null;
+        SideProcessor current = zhenBus.getProcessor(connection.binding().targetFace());
+        if (current != target) return null;
+        return (IOComponent<?,?>) current.getIOProcessor().get(type);
+    }
+
+    @SuppressWarnings({"unchecked", "rawtypes"})
+    private static Object insert(IOComponent component, Object value, int[] slots, boolean simulate) {
+        Object remaining = value;
+        for (int slot : slots) {
+            if (getAmount(remaining) <= 0) break;
+            remaining = component.insert(slot, remaining, simulate);
+        }
+        return remaining;
+    }
+
+    private static int[] getInsertSlots(Connection connection, IOType type) {
+        SideProcessor target = connection.processor();
+        IOComponent<?, ?> component = target.getIOProcessor().get(type);
+        if (component == null || !(target instanceof AbstractSideProcessor processor)) return new int[0];
+        Map<IOType, Set<Integer>> faceAccess = target.getFaceAccess(connection.binding().targetFace());
+        if (faceAccess == null) return new int[0];
+        Set<Integer> slots = new HashSet<>(faceAccess.getOrDefault(type, Set.of()));
+        SlotPartition partition = processor.getPartition();
+        Set<String> inputZones = connection.binding().inputZones();
+        if (inputZones.isEmpty()) {
+            slots.removeIf(slot -> !partition.isInput(type, slot));
+        } else {
+            Set<Integer> zoneSlots = new HashSet<>();
+            for (String zoneName : inputZones) {
+                SlotZone zone = partition.getZoneByName(zoneName);
+                if (zone != null && zone.getName().contains("input")) {
+                    zoneSlots.addAll(partition.getSlots(type, zone));
+                }
+            }
+            slots.retainAll(zoneSlots);
+        }
+        return slots.stream().mapToInt(Integer::intValue).sorted().toArray();
     }
 
     /** 提取值的总量。新增 IOType 时在此添加一行。 */
@@ -90,15 +144,15 @@ public class VirtualPort {
     }
 
     public boolean canAccept(IOType type) {
-        for (SideProcessor sp : connectedProcessors) {
-            if (sp.getIOProcessor().get(type) != null) return true;
+        for (Connection connection : connections) {
+            if (getInsertSlots(connection, type).length > 0) return true;
         }
         return false;
     }
 
     /** 扫描所有绑定面，收集所有可连接的处理器。 */
     public void scanNeighbors(Level level, BlockPos hostPos) {
-        List<SideProcessor> found = new ArrayList<>();
+        List<Connection> found = new ArrayList<>();
         for (PortBinding binding : bindings) {
             BlockPos targetPos = hostPos.relative(binding.hostFace());
             if (!level.isLoaded(targetPos)) continue;
@@ -107,15 +161,15 @@ public class VirtualPort {
             if (be instanceof ZhenBusBlockEntity zhenBus) {
                 SideProcessor sp = zhenBus.getProcessor(binding.targetFace());
                 if (sp != null) {
-                    found.add(sp);
+                    found.add(new Connection(binding, sp));
                 }
             }
         }
-        this.connectedProcessors = found.isEmpty() ? List.of() : List.copyOf(found);
+        this.connections = found.isEmpty() ? List.of() : List.copyOf(found);
     }
 
     public void invalidate() {
-        this.connectedProcessors = List.of();
+        this.connections = List.of();
         this.lastScanTick = -1;
     }
 
@@ -129,5 +183,8 @@ public class VirtualPort {
     public void forceScan(Level level, BlockPos pos, long currentTick) {
         scanNeighbors(level, pos);
         lastScanTick = currentTick;
+    }
+
+    private record Connection(PortBinding binding, SideProcessor processor) {
     }
 }

@@ -2,30 +2,25 @@ package cn.yhzcake.magicio.io;
 
 import cn.yhzcake.magicio.block.inventory.SlotPartition;
 import cn.yhzcake.magicio.block.inventory.SlotZone;
+import cn.yhzcake.magicio.item.crafting.ItemRequirement;
 import net.minecraft.core.NonNullList;
 import net.minecraft.world.ContainerHelper;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.crafting.Ingredient;
 import net.minecraft.world.level.storage.ValueInput;
 import net.minecraft.world.level.storage.ValueOutput;
-import net.neoforged.neoforge.transfer.ResourceHandler;
-import net.neoforged.neoforge.transfer.item.ItemResource;
+
+import java.util.ArrayList;
+import java.util.Comparator;
 
 public class ItemIOComponent implements IOComponent<Ingredient, ItemStack> {
     private final NonNullList<ItemStack> items;
     private final SlotPartition partition;
-    private final ResourceHandler<ItemResource> handler;
     private Runnable onChange = () -> {};
 
     public ItemIOComponent(NonNullList<ItemStack> items, SlotPartition partition) {
         this.items = items;
         this.partition = partition;
-        var allSlots = partition.getAllSlots(ModIOTypes.ITEM.get());
-        this.handler = new LinkedItemHandler(items, allSlots, allSlots);
-    }
-
-    public ResourceHandler<ItemResource> getHandler() {
-        return handler;
     }
 
     public NonNullList<ItemStack> getItems() {
@@ -45,9 +40,6 @@ public class ItemIOComponent implements IOComponent<Ingredient, ItemStack> {
     @Override
     public void setChangeCallback(Runnable onChanged) {
         this.onChange = onChanged;
-        if (handler instanceof LinkedItemHandler lh) {
-            lh.setOnChange(onChanged);
-        }
     }
 
     public void notifyChanged() {
@@ -179,79 +171,58 @@ public class ItemIOComponent implements IOComponent<Ingredient, ItemStack> {
     public ItemStack insertItem(SlotZone zone, ItemStack stack, boolean simulate) {
         if (stack.isEmpty()) return ItemStack.EMPTY;
 
-        ItemStack remaining = stack.copy();
-
-        for (int slot : partition.getSlots(ModIOTypes.ITEM.get(), zone)) {
-            if (remaining.isEmpty()) break;
-            ItemStack existing = items.get(slot);
-            if (ItemStack.isSameItemSameComponents(existing, remaining)) {
-                int canInsert = Math.min(remaining.getCount(), existing.getMaxStackSize() - existing.getCount());
-                if (canInsert > 0) {
-                    if (!simulate) {
-                        existing.grow(canInsert);
-                        notifyChanged();
-                    }
-                    remaining.shrink(canInsert);
-                }
+        if (simulate) {
+            // 模拟使用纯算法
+            NonNullList<ItemStack> copy = NonNullList.withSize(items.size(), ItemStack.EMPTY);
+            for (int i = 0; i < items.size(); i++) {
+                if (!items.get(i).isEmpty()) copy.set(i, items.get(i).copy());
             }
+            return ItemDescriptor.insertItem(copy, zone, stack.copy(), partition);
         }
 
-        for (int slot : partition.getSlots(ModIOTypes.ITEM.get(), zone)) {
-            if (remaining.isEmpty()) break;
-            ItemStack existing = items.get(slot);
-            if (existing.isEmpty()) {
-                ItemStack placed = remaining.split(remaining.getCount());
-                if (!simulate) {
-                    items.set(slot, placed);
-                    notifyChanged();
-                }
-            }
-        }
-
-        return remaining.isEmpty() ? ItemStack.EMPTY : remaining;
+        ItemStack remaining = ItemDescriptor.insertItem(items, zone, stack.copy(), partition);
+        if (!remaining.equals(stack)) notifyChanged();
+        return remaining;
     }
 
-    // ===== 消耗 =====
+    public boolean consumeItem(SlotZone zone, NonNullList<ItemRequirement> requirements) {
+        if (requirements.isEmpty()) return true;
 
-    @Override
-    public void consume(int slot, Ingredient requirement) {
-        ItemStack existing = items.get(slot);
-        if (requirement.test(existing)) {
-            existing.shrink(1);
-            if (existing.isEmpty()) {
-                items.set(slot, ItemStack.EMPTY);
-            }
-            notifyChanged();
+        NonNullList<ItemStack> snapshot = NonNullList.withSize(items.size(), ItemStack.EMPTY);
+        for (int i = 0; i < items.size(); i++) {
+            if (!items.get(i).isEmpty()) snapshot.set(i, items.get(i).copy());
         }
-    }
 
-    public boolean consumeItem(SlotZone zone, NonNullList<Ingredient> ingredients) {
-        if (ingredients.isEmpty()) return true;
-
-        for (Ingredient ingredient : ingredients) {
-            boolean consumed = false;
+        var ordered = new ArrayList<>(requirements);
+        ordered.sort(Comparator.comparingInt(requirement -> countMatchingSlots(requirement, snapshot, zone)));
+        for (ItemRequirement requirement : ordered) {
+            int remaining = requirement.count();
             for (int slot : partition.getSlots(ModIOTypes.ITEM.get(), zone)) {
-                if (consumeCheck(ingredient, slot)) {
-                    consumed = true;
-                    break;
+                ItemStack existing = snapshot.get(slot);
+                if (requirement.ingredient().test(existing)) {
+                    int consumed = Math.min(remaining, existing.getCount());
+                    existing.shrink(consumed);
+                    remaining -= consumed;
+                    if (existing.isEmpty()) snapshot.set(slot, ItemStack.EMPTY);
+                    if (remaining == 0) break;
                 }
             }
-            if (!consumed) return false;
+            if (remaining > 0) return false;
         }
+
+        for (int slot : partition.getSlots(ModIOTypes.ITEM.get(), zone)) {
+            items.set(slot, snapshot.get(slot));
+        }
+        notifyChanged();
         return true;
     }
 
-    private boolean consumeCheck(Ingredient ingredient, int slot) {
-        ItemStack existing = items.get(slot);
-        if (ingredient.test(existing)) {
-            existing.shrink(1);
-            if (existing.isEmpty()) {
-                items.set(slot, ItemStack.EMPTY);
-            }
-            notifyChanged();
-            return true;
+    private int countMatchingSlots(ItemRequirement requirement, NonNullList<ItemStack> snapshot, SlotZone zone) {
+        int count = 0;
+        for (int slot : partition.getSlots(ModIOTypes.ITEM.get(), zone)) {
+            if (!snapshot.get(slot).isEmpty() && requirement.ingredient().test(snapshot.get(slot))) count++;
         }
-        return false;
+        return count;
     }
 
     // ===== 产出 =====

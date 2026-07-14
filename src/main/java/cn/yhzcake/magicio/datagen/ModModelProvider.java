@@ -2,7 +2,6 @@ package cn.yhzcake.magicio.datagen;
 
 import cn.yhzcake.magicio.MagicIO;
 import cn.yhzcake.magicio.block.ModBlocks;
-import cn.yhzcake.magicio.block.zhenbus.ModZhenBusBlocks;
 import net.minecraft.client.data.models.BlockModelGenerators;
 import net.minecraft.client.data.models.ItemModelGenerators;
 import net.minecraft.client.data.models.ModelProvider;
@@ -14,6 +13,7 @@ import net.minecraft.resources.Identifier;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.level.block.Block;
 
+@SuppressWarnings("unused")
 public class ModModelProvider extends ModelProvider {
 
     private static final Identifier MAGIC_CIRCLE_MODEL = Identifier.fromNamespaceAndPath(MagicIO.MOD_ID, "item/magic_circle");

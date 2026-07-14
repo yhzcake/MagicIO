@@ -11,14 +11,26 @@ import net.minecraft.world.level.storage.loot.LootParams;
 import net.minecraft.world.level.storage.loot.LootTable;
 import net.minecraft.world.level.storage.loot.parameters.LootContextParamSets;
 
-public record OutputEntry(@Nullable ItemStack stack, @Nullable Identifier lootTableId) {
+public record OutputEntry(@Nullable ItemStack rawStack, @Nullable Identifier itemId, int count, @Nullable Identifier lootTableId) {
 
     public static OutputEntry item(ItemStack stack) {
-        return new OutputEntry(stack, null);
+        return new OutputEntry(stack, null, stack.getCount(), null);
+    }
+
+    public static OutputEntry item(Identifier itemId, int count) {
+        return new OutputEntry(null, itemId, Math.max(1, count), null);
     }
 
     public static OutputEntry lootTable(Identifier lootTableId) {
-        return new OutputEntry(null, lootTableId);
+        return new OutputEntry(null, null, 0, lootTableId);
+    }
+
+    public @Nullable ItemStack stack() {
+        if (rawStack != null) return rawStack;
+        if (itemId == null) return null;
+        return net.minecraft.core.registries.BuiltInRegistries.ITEM.get(itemId)
+                .map(holder -> new ItemStack(holder.value(), count))
+                .orElse(ItemStack.EMPTY);
     }
 
     public boolean isLootTable() {
@@ -27,6 +39,7 @@ public record OutputEntry(@Nullable ItemStack stack, @Nullable Identifier lootTa
 
     public NonNullList<ItemStack> roll(ServerLevel level) {
         NonNullList<ItemStack> result = NonNullList.create();
+        ItemStack stack = stack();
         if (stack != null && !stack.isEmpty()) {
             result.add(stack.copy());
         }
@@ -47,6 +60,7 @@ public record OutputEntry(@Nullable ItemStack stack, @Nullable Identifier lootTa
     }
 
     public boolean isEmpty() {
+        ItemStack stack = stack();
         return (stack == null || stack.isEmpty()) && lootTableId == null;
     }
 }

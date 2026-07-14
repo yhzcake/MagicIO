@@ -2,10 +2,20 @@
   "type": "magic_io:zhen_block",
   "zhen_type": "magic_io:archaic_void_zhen",
   "inputs": {
-    "item_input_all": [{"item": "minecraft:obsidian", "count": 4}]
+    "item_input_all": [
+      {
+        "count": 4,
+        "item": "minecraft:obsidian"
+      }
+    ]
   },
   "outputs": {
-    "item_output_all": [{"item": "minecraft:crying_obsidian", "count": 4}]
+    "item_output_all": [
+      {
+        "item": "minecraft:crying_obsidian",
+        "count": 4
+      }
+    ]
   },
   "processing_time": 300
 }

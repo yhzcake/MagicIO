@@ -2,10 +2,24 @@
   "type": "magic_io:zhen_block",
   "zhen_type": "magic_io:archaic_weave_zhen",
   "inputs": {
-    "item_input_all": [{"item": "minecraft:iron_ingot", "count": 2}, {"item": "minecraft:stick", "count": 2}]
+    "item_input_all": [
+      {
+        "count": 2,
+        "item": "minecraft:iron_ingot"
+      },
+      {
+        "count": 2,
+        "item": "minecraft:stick"
+      }
+    ]
   },
   "outputs": {
-    "item_output_all": [{"item": "minecraft:piston", "count": 2}]
+    "item_output_all": [
+      {
+        "item": "minecraft:piston",
+        "count": 2
+      }
+    ]
   },
   "processing_time": 100
 }

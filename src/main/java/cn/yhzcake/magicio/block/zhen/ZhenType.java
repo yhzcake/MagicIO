@@ -183,7 +183,7 @@ public class ZhenType {
     @SubscribeEvent
     public static void register(NewRegistryEvent event) {
         ZHEN_TYPES = new RegistryBuilder<>(ZHEN_TYPE_REGISTRY_KEY)
-                .defaultKey(Identifier.fromNamespaceAndPath(MagicIO.MOD_ID, "unstable_sift_zhen"))
+                .defaultKey(Identifier.fromNamespaceAndPath(MagicIO.MOD_ID, "unstable_sieve_zhen"))
                 .create();
         event.register(ZHEN_TYPES);
     }

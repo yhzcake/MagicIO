@@ -2,10 +2,20 @@
   "type": "magic_io:zhen_block",
   "zhen_type": "magic_io:stable_frost_zhen",
   "inputs": {
-    "item_input_all": [{"item": "minecraft:water_bucket", "count": 1}]
+    "item_input_all": [
+      {
+        "count": 1,
+        "item": "minecraft:water_bucket"
+      }
+    ]
   },
   "outputs": {
-    "item_output_all": [{"item": "minecraft:ice", "count": 3}]
+    "item_output_all": [
+      {
+        "item": "minecraft:ice",
+        "count": 3
+      }
+    ]
   },
   "processing_time": 120
 }

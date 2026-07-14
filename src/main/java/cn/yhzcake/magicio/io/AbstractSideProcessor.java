@@ -1,7 +1,5 @@
 package cn.yhzcake.magicio.io;
 
-import java.util.Collections;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -13,15 +11,11 @@ import cn.yhzcake.magicio.block.inventory.FaceAccessController;
 import cn.yhzcake.magicio.block.inventory.SlotPartition;
 import cn.yhzcake.magicio.block.inventory.SlotZone;
 import cn.yhzcake.magicio.block.zhen.ZhenType;
-import cn.yhzcake.magicio.block.zhenbus.PortBinding;
 import cn.yhzcake.magicio.block.zhenbus.VirtualPort;
-import cn.yhzcake.magicio.item.crafting.RecipeProcessor;
-import cn.yhzcake.magicio.item.crafting.ZhenRecipe;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.core.NonNullList;
 import net.minecraft.network.FriendlyByteBuf;
-import net.minecraft.world.ContainerHelper;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemStack;
@@ -46,13 +40,6 @@ public abstract class AbstractSideProcessor implements SideProcessor {
     protected final @Nullable Integer tankCapacity;
     protected final @Nullable Integer energyCapacity;
 
-    protected int processTime = 0;
-    protected boolean inputsChanged = false;
-    protected @Nullable ZhenRecipe currentRecipe;
-    /** 持久化的配方缓存值，避免 effectiveProcessingTime 等每 tick 丢失 */
-    private int effectiveProcessingTime = 0;
-    private double outputMultiplier = 1.0;
-    private int lastInputHash = 0;
     protected Runnable onChanged = new Runnable() {
         @Override
         public void run() {
@@ -64,13 +51,9 @@ public abstract class AbstractSideProcessor implements SideProcessor {
     private int tickCounter = 0;
     private static final int IDLE_TICK_INTERVAL = 20;  // 空闲时每 20 tick（1 秒）唤醒一次
 
-    /** 是否曾有过邻接 ZhenBus 的连接（用于跳过端口刷新循环） */
-    private boolean hasEverConnectedPort = false;
-    /** 空闲时端口扫描计时器（无连接时降低扫描频率） */
-    private int portScanTimer = 0;
-    private static final int PORT_SCAN_INTERVAL_IDLE = 200;  // 无连接时每 200 tick 扫描一次
-
-    private final Map<String, VirtualPort> virtualPorts = new HashMap<>();
+    private final SideRecipeStateAdapter recipeState = new SideRecipeStateAdapter();
+    private final SidePortManager portManager;
+    private final SideProcessorPersistence persistence;
 
     // 槽位集合缓存（由 initIOComponents 初始化）
     private Set<Integer> outputItemSlots = Set.of();
@@ -78,6 +61,7 @@ public abstract class AbstractSideProcessor implements SideProcessor {
     private Set<Integer> fluidSlots = Set.of();
     private Set<Integer> fluidInputSlots = Set.of();
     private Set<Integer> fluidOutputSlots = Set.of();
+    private Set<Integer> energyOutputSlots = Set.of();
 
     public Set<Integer> getInputItemSlots() {
         return inputItemSlots;
@@ -99,6 +83,10 @@ public abstract class AbstractSideProcessor implements SideProcessor {
         return fluidOutputSlots;
     }
 
+    public SlotPartition getPartition() {
+        return partition;
+    }
+
     public AbstractSideProcessor(Direction side, ZhenType zhenType, BlockPos pos, Level level) {
         this.side = side;
         this.zhenType = zhenType;
@@ -115,9 +103,11 @@ public abstract class AbstractSideProcessor implements SideProcessor {
 
         this.ioProcessor = new IOProcessor();
         initIOComponents();
-        initVirtualPorts();
         initSlotCache();
         initFaceAccess();
+        this.portManager = new SidePortManager(level, pos, side, ioProcessor, items, tanks,
+                outputItemSlots, fluidOutputSlots, energyOutputSlots, energyCapacity);
+        this.persistence = new SideProcessorPersistence(zhenType.getType(), side, ioProcessor, recipeState);
     }
 
     private void initIOComponents() {
@@ -129,7 +119,7 @@ public abstract class AbstractSideProcessor implements SideProcessor {
         ioProcessor.registerChangeCallback(() -> {
             Runnable cb = onChanged;
             if (cb != null) cb.run();
-            inputsChanged = true;
+            recipeState.markInputsChanged();
         });
     }
 
@@ -138,6 +128,7 @@ public abstract class AbstractSideProcessor implements SideProcessor {
         outputItemSlots = Set.copyOf(partition.getSlots(ModIOTypes.ITEM.get(), SlotZone.ITEM_OUTPUT_ALL));
         fluidInputSlots = Set.copyOf(partition.getSlots(ModIOTypes.FLUID.get(), SlotZone.FLUID_INPUT_ALL));
         fluidOutputSlots = Set.copyOf(partition.getSlots(ModIOTypes.FLUID.get(), SlotZone.FLUID_OUTPUT_ALL));
+        energyOutputSlots = Set.copyOf(partition.getSlots(ModIOTypes.ENERGY.get(), SlotZone.ENERGY_OUTPUT_ALL));
         Set<Integer> combined = new java.util.HashSet<>(fluidInputSlots);
         combined.addAll(fluidOutputSlots);
         fluidSlots = Set.copyOf(combined);
@@ -168,74 +159,24 @@ public abstract class AbstractSideProcessor implements SideProcessor {
         }
     }
 
-    // ============ VirtualPort 管理 ============
-
-    private void initVirtualPorts() {
-        virtualPorts.clear();
-        virtualPorts.put("self", new VirtualPort("self", List.of(
-                new PortBinding(side, side.getOpposite())
-        )));
-        for (Direction dir : Direction.values()) {
-            virtualPorts.put(dir.getName(), new VirtualPort(dir.getName(), List.of(
-                    new PortBinding(dir, dir.getOpposite())
-            )));
-        }
-    }
-
     public void scanAllPorts() {
-        if (level == null) return;
-        long currentTick = level.getGameTime();
-        for (VirtualPort port : virtualPorts.values()) {
-            port.forceScan(level, pos, currentTick);
-        }
-        // 扫描后更新连接标志
-        hasEverConnectedPort = false;
-        for (VirtualPort port : virtualPorts.values()) {
-            if (port.hasDirectConnection()) {
-                hasEverConnectedPort = true;
-                break;
-            }
-        }
+        portManager.scanAll();
     }
 
     public void invalidatePorts() {
-        for (VirtualPort port : virtualPorts.values()) {
-            port.invalidate();
-        }
+        portManager.invalidate();
     }
 
     public void tickRefreshPorts() {
-        if (level == null) return;
-        long currentTick = level.getGameTime();
-        if (hasEverConnectedPort) {
-            // 已有连接：正常按 200 tick 间隔刷新
-            for (VirtualPort port : virtualPorts.values()) {
-                port.tickRefresh(level, pos, currentTick);
-            }
-        } else {
-            // 无连接：降低扫描频率（每 PORT_SCAN_INTERVAL_IDLE tick 一次）
-            if (portScanTimer++ >= PORT_SCAN_INTERVAL_IDLE) {
-                portScanTimer = 0;
-                for (VirtualPort port : virtualPorts.values()) {
-                    port.tickRefresh(level, pos, currentTick);
-                }
-                // 扫描后检查是否发现新连接
-                for (VirtualPort port : virtualPorts.values()) {
-                    if (port.hasDirectConnection()) {
-                        hasEverConnectedPort = true;
-                        break;
-                    }
-                }
-            }
-        }
+        portManager.tickRefresh();
     }
 
     public @Nullable VirtualPort getPort(String name) {
-        return virtualPorts.get(name);
+        return portManager.getPort(name);
     }
 
     public Map<String, VirtualPort> getVirtualPorts() {
-        return Collections.unmodifiableMap(virtualPorts);
+        return portManager.getPorts();
     }
 
     // ============ 面访问控制 ============
@@ -244,76 +185,6 @@ public abstract class AbstractSideProcessor implements SideProcessor {
     public @Nullable Map<IOType, Set<Integer>> getFaceAccess(Direction worldDirection) {
         Map<Direction, Map<IOType, Set<Integer>>> raw = faceAccessController.getIoFaceAccess();
         return raw.get(worldDirection);
-    }
-
-    // ============ VirtualPort 产出推送 ============
-
-    /** 遍历所有已注册的 IO 组件，自动通过 VirtualPort 推送其输出槽。 */
-    private void pushOutputsThroughPorts() {
-        boolean changed = false;
-
-        for (IOComponent<?, ?> component : ioProcessor.getAll()) {
-            IOType type = component.type();
-            if (type == ModIOTypes.ENERGY.get()) {
-                changed = pushEnergyOutput() || changed;
-            } else if (type == ModIOTypes.FLUID.get()) {
-                changed = pushOutput(fluidSlots, tanks, type) || changed;
-            } else {
-                changed = pushOutput(outputItemSlots, items, type) || changed;
-            }
-        }
-
-        if (changed && onChanged != null) {
-            onChanged.run();
-        }
-    }
-
-    private <T> boolean pushOutput(Set<Integer> outputSlots, NonNullList<T> storage, IOType type) {
-        boolean changed = false;
-        for (int slot : outputSlots) {
-            T value = storage.get(slot);
-            if (isSlotEmpty(value)) continue;
-            for (VirtualPort port : virtualPorts.values()) {
-                if (!port.hasDirectConnection()) continue;
-                T remaining = port.transfer(value, type, false);
-                if (!isSlotSameAmount(remaining, value)) {
-                    storage.set(slot, remaining);
-                    changed = true;
-                    break;
-                }
-            }
-        }
-        return changed;
-    }
-
-    private static boolean isSlotEmpty(Object value) {
-        if (value instanceof ItemStack is) return is.isEmpty();
-        if (value instanceof FluidStack fs) return fs.isEmpty();
-        return false;
-    }
-
-    private static boolean isSlotSameAmount(Object a, Object b) {
-        if (a instanceof ItemStack ia && b instanceof ItemStack ib) return ia.getCount() == ib.getCount();
-        if (a instanceof FluidStack fa && b instanceof FluidStack fb) return fa.getAmount() == fb.getAmount();
-        return true;
-    }
-
-    @SuppressWarnings({"rawtypes"})
-    private boolean pushEnergyOutput() {
-        if (energyCapacity == null) return false;
-        IOComponent rawComp = ioProcessor.get(ModIOTypes.ENERGY.get());
-        if (!(rawComp instanceof EnergyIOComponent energyComp)) return false;
-        if (energyComp.getEnergy() <= 0) return false;
-
-        for (VirtualPort port : virtualPorts.values()) {
-            if (!port.hasDirectConnection() || !port.canAccept(ModIOTypes.ENERGY.get())) continue;
-            int available = energyComp.getEnergy();
-            Integer remaining = port.transfer(available, ModIOTypes.ENERGY.get(), false);
-            if (remaining < available) {
-                return true;
-            }
-        }
-        return false;
     }
 
     // ============ 接口实现 ============
@@ -349,14 +220,16 @@ public abstract class AbstractSideProcessor implements SideProcessor {
 
     @Override
     public boolean hasWork() {
-        return currentRecipe != null || inputsChanged;
+        return recipeState.hasWork();
     }
 
     @Override
     public void tick() {
+        recipeState.resolvePendingRecipes(zhenType.getType());
+        tickRefreshPorts();
         if (++tickCounter % tickInterval != 0) {
             // 空闲稀释时，每 tick 检查是否变为活跃，保证唤醒延迟 ≤1 tick
-            if (tickInterval > 1 && hasWork()) {
+            if (tickInterval > 1 && (hasWork() || hasPendingOutputs())) {
                 tickCounter = 0;
                 tickInterval = 1;
             } else {
@@ -364,7 +237,7 @@ public abstract class AbstractSideProcessor implements SideProcessor {
             }
         }
 
-        boolean isActive = hasWork() || zhenType.hasTickFactory();
+        boolean isActive = hasWork() || zhenType.hasTickFactory() || hasPendingOutputs();
 
         // 动态 tickInterval：活跃时每 tick 运行，空闲时稀释频率
         if (isActive) {
@@ -376,39 +249,13 @@ public abstract class AbstractSideProcessor implements SideProcessor {
 
         int tank0Before = tanks.isEmpty() ? -1 : (tanks.get(0).isEmpty() ? 0 : tanks.get(0).getAmount());
 
-        tickRefreshPorts();
-
         if (hasWork()) {
-            RecipeProcessor.State recipeState = new RecipeProcessor.State();
-            recipeState.processTime = this.processTime;
-            recipeState.inputsChanged = this.inputsChanged;
-            recipeState.currentRecipe = this.currentRecipe;
-            // 注入持久化的缓存值，避免每 tick 新建 State 导致 effectiveProcessingTime 归零
-            recipeState.effectiveProcessingTime = this.effectiveProcessingTime;
-            recipeState.outputMultiplier = this.outputMultiplier;
-            recipeState.lastInputHash = this.lastInputHash;
+            recipeState.processTick(level, pos, zhenType.getType(), partition,
+                    items, tanks, ioProcessor, faceAccessController.getZoneFaceAccess(), onChanged);
+        }
 
-            boolean needSync = RecipeProcessor.processTick(
-                    level, pos, recipeState, zhenType.getType(),
-                    partition, items, tanks, ioProcessor, faceAccessController.getZoneFaceAccess(),
-                    true,
-                    onChanged);
-
-            // 从 State 同步回 this
-            this.processTime = recipeState.processTime;
-            this.inputsChanged = recipeState.inputsChanged;
-            this.currentRecipe = recipeState.currentRecipe;
-            this.effectiveProcessingTime = recipeState.effectiveProcessingTime;
-            this.outputMultiplier = recipeState.outputMultiplier;
-            this.lastInputHash = recipeState.lastInputHash;
-
-            if (hasEverConnectedPort) {
-                pushOutputsThroughPorts();
-            }
-
-            if (needSync) {
-                level.sendBlockUpdated(pos, level.getBlockState(pos), level.getBlockState(pos), 3);
-            }
+        if (portManager.hasConnectedPort()) {
+            portManager.pushOutputs(onChanged);
         }
 
         int tank0After = tanks.isEmpty() ? -1 : (tanks.get(0).isEmpty() ? 0 : tanks.get(0).getAmount());
@@ -417,6 +264,10 @@ public abstract class AbstractSideProcessor implements SideProcessor {
         }
 
         zhenType.execute(level, pos, level.getBlockState(pos), null);
+    }
+
+    private boolean hasPendingOutputs() {
+        return portManager.hasConnectedPort() && portManager.hasPushableOutput();
     }
 
     @Override
@@ -470,74 +321,53 @@ public abstract class AbstractSideProcessor implements SideProcessor {
 
     @Override
     public int getProcessTime() {
-        return processTime;
+        return recipeState.getProcessTime();
+    }
+
+    public cn.yhzcake.magicio.item.crafting.ProcessingStateSnapshot getProcessingStateSnapshot() {
+        return recipeState.snapshot();
     }
 
     @Override
     public void setProcessTime(int time) {
-        this.processTime = time;
+        recipeState.setProcessTime(time);
     }
 
     @Override
     public boolean isInputsChanged() {
-        return inputsChanged;
+        return recipeState.isInputsChanged();
     }
 
     @Override
     public void setInputsChanged(boolean changed) {
-        this.inputsChanged = changed;
+        recipeState.setInputsChanged(changed);
+    }
+
+    public boolean hasActiveRecipe() {
+        return recipeState.hasActiveRecipe();
+    }
+
+    public void applyClientState(int processTime, boolean hasRecipe) {
+        recipeState.applyClientState(processTime, hasRecipe);
     }
 
     @Override
     public void writeToNBT(ValueOutput output) {
-        output.putString("side", side.getName());
-        output.putInt("process_time", processTime);
-        output.putBoolean("inputs_changed", inputsChanged);
-        ContainerHelper.saveAllItems(output, items);
-        for (int i = 0; i < tanks.size(); i++) {
-            if (!tanks.get(i).isEmpty()) {
-                output.store("FluidTank_" + i, FluidStack.CODEC, tanks.get(i));
-            }
-        }
-        for (IOComponent<?, ?> component : ioProcessor.getAll()) {
-            component.saveNBT(output);
-        }
-        if (currentRecipe != null) {
-            output.putString("current_recipe", currentRecipe.getZhenTypeStr());
-        }
+        persistence.write(output);
     }
 
     @Override
     public void readFromNBT(ValueInput input) {
-        processTime = input.getIntOr("process_time", 0);
-        inputsChanged = input.getBooleanOr("inputs_changed", false);
-        ContainerHelper.loadAllItems(input, items);
-        for (int i = 0; i < tanks.size(); i++) {
-            tanks.set(i, input.read("FluidTank_" + i, FluidStack.CODEC).orElse(FluidStack.EMPTY));
-        }
-        for (IOComponent<?, ?> component : ioProcessor.getAll()) {
-            component.loadNBT(input);
-        }
+        persistence.read(input);
     }
 
     @Override
     public void writeToStream(FriendlyByteBuf buf) {
-        buf.writeInt(processTime);
-        buf.writeBoolean(currentRecipe != null);
+        persistence.writeToStream(buf);
     }
 
     @Override
     public boolean readFromStream(FriendlyByteBuf buf) {
-        boolean changed = false;
-        int newProcessTime = buf.readInt();
-        if (newProcessTime != processTime) {
-            processTime = newProcessTime;
-            changed = true;
-        }
-        boolean hasRecipe = buf.readBoolean();
-        if ((currentRecipe != null) != hasRecipe) {
-            changed = true;
-        }
-        return changed;
+        return persistence.readFromStream(buf);
     }
 }

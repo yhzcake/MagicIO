@@ -2,10 +2,20 @@
   "type": "magic_io:zhen_block",
   "zhen_type": "magic_io:abundant_distill_zhen",
   "inputs": {
-    "item_input_all": [{"item": "minecraft:lava_bucket", "count": 1}]
+    "item_input_all": [
+      {
+        "count": 1,
+        "item": "minecraft:lava_bucket"
+      }
+    ]
   },
   "outputs": {
-    "item_output_all": [{"item": "minecraft:obsidian", "count": 2}]
+    "item_output_all": [
+      {
+        "item": "minecraft:obsidian",
+        "count": 2
+      }
+    ]
   },
   "processing_time": 200
 }

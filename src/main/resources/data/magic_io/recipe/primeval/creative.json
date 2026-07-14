@@ -2,7 +2,12 @@
   "type": "magic_io:zhen_block",
   "zhen_type": "magic_io:primeval_creative_zhen",
   "outputs": {
-    "item_output_all": [{"item": "minecraft:command_block", "count": 1}]
+    "item_output_all": [
+      {
+        "item": "minecraft:command_block",
+        "count": 1
+      }
+    ]
   },
   "processing_time": 1
 }

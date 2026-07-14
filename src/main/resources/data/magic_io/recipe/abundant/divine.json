@@ -2,10 +2,20 @@
   "type": "magic_io:zhen_block",
   "zhen_type": "magic_io:abundant_divine_zhen",
   "inputs": {
-    "item_input_all": [{"item": "minecraft:golden_apple", "count": 1}]
+    "item_input_all": [
+      {
+        "count": 1,
+        "item": "minecraft:golden_apple"
+      }
+    ]
   },
   "outputs": {
-    "item_output_all": [{"item": "minecraft:enchanted_golden_apple", "count": 1}]
+    "item_output_all": [
+      {
+        "item": "minecraft:enchanted_golden_apple",
+        "count": 1
+      }
+    ]
   },
   "processing_time": 400
 }

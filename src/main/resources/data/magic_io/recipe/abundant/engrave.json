@@ -2,10 +2,20 @@
   "type": "magic_io:zhen_block",
   "zhen_type": "magic_io:abundant_engrave_zhen",
   "inputs": {
-    "item_input_all": [{"item": "minecraft:stone", "count": 1}]
+    "item_input_all": [
+      {
+        "count": 1,
+        "item": "minecraft:stone"
+      }
+    ]
   },
   "outputs": {
-    "item_output_all": [{"item": "minecraft:chiseled_stone_bricks", "count": 1}]
+    "item_output_all": [
+      {
+        "item": "minecraft:chiseled_stone_bricks",
+        "count": 1
+      }
+    ]
   },
   "processing_time": 80
 }

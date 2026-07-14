@@ -27,10 +27,6 @@ public interface IOComponent<R, T> {
 
     T insert(T value, boolean simulate);
 
-    // ===== 实际消耗 =====
-
-    void consume(int slot, R requirement);
-
     // ===== 实际产出 =====
 
     void produce(int slot, T value);

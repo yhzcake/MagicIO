@@ -7,7 +7,6 @@ import net.minecraft.core.NonNullList;
 import net.minecraft.resources.Identifier;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.world.item.ItemStack;
-import net.minecraft.world.item.crafting.Ingredient;
 import net.minecraft.world.item.crafting.RecipeHolder;
 import net.minecraft.world.item.crafting.SingleRecipeInput;
 import net.minecraft.world.item.crafting.SmeltingRecipe;
@@ -31,7 +30,7 @@ public class ForgeRecipeBridge {
 
         for (RecipeHolder<?> holder : allRecipes) {
             if (!(holder.value() instanceof SmeltingRecipe furnaceRecipe)) continue;
-            ZhenRecipe zhenRecipe = convert(furnaceRecipe);
+            ZhenRecipe zhenRecipe = convert(holder.id().identifier(), furnaceRecipe);
             if (zhenRecipe != null) {
                 ZhenRecipeManager.getInstance().addRecipe(zhenRecipe);
                 count++;
@@ -41,9 +40,9 @@ public class ForgeRecipeBridge {
         MagicIO.LOGGER.info("[ForgeRecipeBridge] 已注入 {} 个熔炉配方到 {}", count, FORGE_TYPE);
     }
 
-    private static ZhenRecipe convert(SmeltingRecipe recipe) {
+    private static ZhenRecipe convert(Identifier sourceId, SmeltingRecipe recipe) {
         // 原料 — SingleItemRecipe.input()
-        Ingredient ingredient = recipe.input();
+        var ingredient = recipe.input();
         if (ingredient.isEmpty()) return null;
 
         // 产出 — assemble() 返回 ItemStack（1.21.5: result() 是 protected）
@@ -51,8 +50,8 @@ public class ForgeRecipeBridge {
         if (result.isEmpty()) return null;
 
         // 组装输入
-        NonNullList<Ingredient> inputList = NonNullList.create();
-        inputList.add(ingredient);
+        NonNullList<ItemRequirement> inputList = NonNullList.create();
+        inputList.add(new ItemRequirement(ingredient, 1));
         var recipeInput = new RecipeInput<>(ModIOTypes.ITEM.get(),
                 SlotZone.ITEM_INPUT_ALL.getName(), inputList);
 
@@ -66,6 +65,8 @@ public class ForgeRecipeBridge {
         if (processingTime <= 0) processingTime = 200;
 
         return new ZhenRecipe(
+                Identifier.fromNamespaceAndPath(MagicIO.MOD_ID,
+                        "bridge/smelting/" + sourceId.getNamespace() + "/" + sourceId.getPath()),
                 Identifier.parse(FORGE_TYPE),
                 java.util.List.of(recipeInput),
                 java.util.List.of(recipeOutput),

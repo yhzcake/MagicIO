@@ -15,7 +15,6 @@ import cn.yhzcake.magicio.io.AbstractSideProcessor;
 import cn.yhzcake.magicio.io.SideProcessor;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
-import net.minecraft.core.NonNullList;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemStack;
@@ -73,6 +72,12 @@ public class ZhenBusContainer {
         if (processor != null) {
             Level level = processor.getLevel();
             BlockPos pos = processor.getPos();
+            // 收集处理器内容物并掉落（与 add 覆盖替换逻辑保持一致）
+            List<ItemStack> drops = new ArrayList<>();
+            processor.addDrops(drops);
+            for (ItemStack drop : drops) {
+                if (level != null) Block.popResource(level, pos, drop);
+            }
             processor.onRemove();
             storage.remove(dir);
             if (level != null) level.invalidateCapabilities(pos);
@@ -149,40 +154,15 @@ public class ZhenBusContainer {
     public void writeToUpdateTag(net.minecraft.nbt.CompoundTag tag) {
         for (Direction dir : Direction.values()) {
             SideProcessor processor = storage.get(dir);
-            if (processor == null) continue;
             net.minecraft.nbt.CompoundTag sideTag = new net.minecraft.nbt.CompoundTag();
+            sideTag.putBoolean("present", processor != null);
+            if (processor == null) {
+                tag.put(dir.getName(), sideTag);
+                continue;
+            }
             sideTag.putString("type", processor.getZhenType().getType());
-            sideTag.putInt("processing_time", processor.getProcessTime());
-            sideTag.putBoolean("inputs_changed", processor.isInputsChanged());
-
-            NonNullList<ItemStack> procItems = processor.getItemsForSerialization();
-            if (procItems != null) {
-                List<ItemStack> nonEmpty = new ArrayList<>();
-                for (ItemStack stack : procItems) {
-                    if (!stack.isEmpty()) {
-                        nonEmpty.add(stack.copy());
-                    }
-                }
-                if (!nonEmpty.isEmpty()) {
-                    sideTag.put("items", ITEMS_CODEC.encodeStart(
-                            net.minecraft.nbt.NbtOps.INSTANCE, nonEmpty).result().orElse(new net.minecraft.nbt.ListTag()));
-                }
-            }
-
-            NonNullList<FluidStack> procFluids = processor.getFluidsForSerialization();
-            if (procFluids != null) {
-                List<FluidStack> nonEmpty = new ArrayList<>();
-                for (FluidStack fs : procFluids) {
-                    if (!fs.isEmpty()) {
-                        nonEmpty.add(fs.copy());
-                    }
-                }
-                if (!nonEmpty.isEmpty()) {
-                    sideTag.put("fluids", FLUIDS_CODEC.encodeStart(
-                            net.minecraft.nbt.NbtOps.INSTANCE, nonEmpty).result().orElse(new net.minecraft.nbt.ListTag()));
-                }
-            }
-
+            sideTag.putInt("process_time", processor.getProcessTime());
+            sideTag.putBoolean("has_recipe", processor instanceof AbstractSideProcessor ap && ap.hasActiveRecipe());
             tag.put(dir.getName(), sideTag);
         }
     }
@@ -190,29 +170,8 @@ public class ZhenBusContainer {
     private void writeProcessorToNBT(ValueOutput output, Direction dir, SideProcessor processor) {
         ValueOutput child = output.child(dir.getName());
         child.putString("type", processor.getZhenType().getType());
-        child.putInt("processing_time", processor.getProcessTime());
-        child.putBoolean("inputs_changed", processor.isInputsChanged());
-
-        NonNullList<ItemStack> procItems = processor.getItemsForSerialization();
-        if (procItems != null) {
-            List<ItemStack> nonEmpty = new ArrayList<>();
-            for (ItemStack stack : procItems) {
-                if (!stack.isEmpty()) {
-                    nonEmpty.add(stack.copy());
-                }
-            }
-            child.store("items", ITEMS_CODEC, nonEmpty);
-        }
-
-        NonNullList<FluidStack> procFluids = processor.getFluidsForSerialization();
-        if (procFluids != null) {
-            List<FluidStack> nonEmpty = new ArrayList<>();
-            for (FluidStack fs : procFluids) {
-                if (!fs.isEmpty()) {
-                    nonEmpty.add(fs.copy());
-                }
-            }
-            child.store("fluids", FLUIDS_CODEC, nonEmpty);
+        if (processor instanceof AbstractSideProcessor ap) {
+            ap.writeToNBT(child);
         }
     }
 
@@ -223,16 +182,12 @@ public class ZhenBusContainer {
                 String typeName = child.getString("type").orElse("");
                 if (typeName.isEmpty()) return;
 
-                ZhenType type = ZhenTypes.getType(typeName);
+                ZhenType type = ZhenTypes.getTypeStrict(typeName);
                 if (type == null) return;
 
                 AbstractSideProcessor processor = new AbstractSideProcessor(dir, type, pos, level) {};
-                processor.setProcessTime(child.getIntOr("processing_time", 0));
-                processor.setInputsChanged(true);
-                // 自动恢复所有 IOType 组件
-                for (cn.yhzcake.magicio.io.IOComponent<?, ?> component : processor.getIOProcessor().getAll()) {
-                    component.loadNBT(child);
-                }
+                processor.readFromNBT(child);
+                processor.onAdd();
                 processor.setChangeCallback(onChanged);
                 storage.set(dir, processor);
             });

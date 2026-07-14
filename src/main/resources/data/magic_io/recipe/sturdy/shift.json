@@ -2,10 +2,20 @@
   "type": "magic_io:zhen_block",
   "zhen_type": "magic_io:sturdy_shift_zhen",
   "inputs": {
-    "item_input_all": [{"item": "minecraft:water_bucket", "count": 1}]
+    "item_input_all": [
+      {
+        "count": 1,
+        "item": "minecraft:water_bucket"
+      }
+    ]
   },
-  "outputs": {
-    "fluid_output_all": [{"fluid": "minecraft:water", "amount": 100}]
+  "fluid_outputs": {
+    "fluid_output_all": [
+      {
+        "id": "minecraft:water",
+        "amount": 100
+      }
+    ]
   },
   "processing_time": 100
 }

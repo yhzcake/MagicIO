@@ -4,7 +4,10 @@
   "processing_time": 10,
   "fluid_outputs": {
     "fluid_output_all": [
-      {"fluid": "minecraft:water", "amount": 20}
+      {
+        "id": "minecraft:water",
+        "amount": 20
+      }
     ]
   }
 }

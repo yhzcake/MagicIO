@@ -4,7 +4,10 @@
   "processing_time": 100,
   "outputs": {
     "item_output_all": [
-      {"item": "minecraft:wind_charge", "count": 1}
+      {
+        "item": "minecraft:wind_charge",
+        "count": 1
+      }
     ]
   }
 }

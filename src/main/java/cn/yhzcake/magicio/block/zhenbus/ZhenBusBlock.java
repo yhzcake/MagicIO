@@ -151,18 +151,6 @@ public class ZhenBusBlock extends BaseEntityBlock {
     }
 
     @Override
-    public void playerDestroy(Level level, Player player, BlockPos pos, BlockState state, @Nullable BlockEntity blockEntity, ItemStack stack) {
-        // 掉落实体方块自身
-        super.playerDestroy(level, player, pos, state, blockEntity, stack);
-        // 掉落处理器内的物品（setRemoved 不再处理掉落以规避世界重载时误掉）
-        if (!level.isClientSide() && blockEntity instanceof ZhenBusBlockEntity be) {
-            for (ItemStack drop : be.collectDrops()) {
-                Block.popResource(level, pos, drop);
-            }
-        }
-    }
-
-    @Override
     protected InteractionResult useWithoutItem(BlockState state, Level level, BlockPos pos, Player player, BlockHitResult hitResult) {
         return InteractionResult.PASS;
     }

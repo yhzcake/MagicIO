@@ -114,7 +114,7 @@ public class MagicIOJeiPlugin implements IModPlugin {
         ensureCategories();
 
         // 优先从缓存取（单机集成服务器已有数据）
-        var cached = ZhenRecipeManager.getInstance().getAllRecipes();
+        var cached = ZhenRecipeManager.getClientInstance().getAllRecipes();
         if (!cached.isEmpty()) {
             int count = registerFrom(cached, registration::addRecipes);
             if (count > 0) {
@@ -146,9 +146,16 @@ public class MagicIOJeiPlugin implements IModPlugin {
     @Override
     public void onRuntimeAvailable(IJeiRuntime runtime) {
         jeiRuntime = runtime;
-        // 运行时就绪后也尝试刷新（覆盖网络包到达较早的情况）
-        var all = ZhenRecipeManager.getInstance().getAllRecipes();
-        if (!all.isEmpty()) refreshFromCache();
+        var all = ZhenRecipeManager.getClientInstance().getAllRecipes();
+        if (!all.isEmpty()) {
+            refreshFromCache();
+        }
+        cn.yhzcake.magicio.network.ZhenRecipeClientRequests.requestCatalog();
+    }
+
+    @Override
+    public void onRuntimeUnavailable() {
+        jeiRuntime = null;
     }
 
     // ====== 运行时刷新 ======
@@ -156,8 +163,7 @@ public class MagicIOJeiPlugin implements IModPlugin {
     /** 服务端同步后调用：用服务端配方刷新 JEI 显示 */
     public static void refreshFromCache() {
         if (jeiRuntime == null) return;
-        var all = ZhenRecipeManager.getInstance().getAllRecipes();
-        if (all.isEmpty()) return;
+        var all = ZhenRecipeManager.getClientInstance().getAllRecipes();
 
         var recipeManager = jeiRuntime.getRecipeManager();
         // 先隐藏该类型下所有现有配方，再添加新的
@@ -170,6 +176,16 @@ public class MagicIOJeiPlugin implements IModPlugin {
         MagicIO.LOGGER.info("[JEI] Refreshed {} zhen recipes from server sync", count);
     }
 
+    public static void clearRecipes() {
+        if (jeiRuntime != null) {
+            var recipeManager = jeiRuntime.getRecipeManager();
+            for (var type : CATEGORIES.values()) {
+                var existing = recipeManager.createRecipeLookup(type).get().toList();
+                recipeManager.hideRecipes(type, existing);
+            }
+        }
+    }
+
     // ====== 内部 ======
 
     @FunctionalInterface
@@ -179,48 +195,26 @@ public class MagicIOJeiPlugin implements IModPlugin {
 
     /** 从配方列表注册到目标接收器 */
     private static int registerFrom(List<ZhenRecipe> recipes, RecipeAdder adder) {
-        Map<String, ZhenRecipe> unique = new LinkedHashMap<>();
+        Map<String, List<ZhenRecipe>> grouped = new LinkedHashMap<>();
+        Set<Identifier> seen = new HashSet<>();
         for (var recipe : recipes) {
             String name = baseName(recipe);
             if ("forge".equals(name)) continue;
             if (recipe.getFixedOutputs().isEmpty() && !hasLootOutput(recipe) && !hasFluidOutput(recipe)) continue;
-            unique.putIfAbsent(name, recipe);
+            if (!seen.add(recipe.getRecipeId())) continue;
+            grouped.computeIfAbsent(name, ignored -> new ArrayList<>()).add(recipe);
         }
 
         int count = 0;
-        for (var entry : unique.entrySet()) {
+        for (var entry : grouped.entrySet()) {
             IRecipeType<ZhenRecipe> type = CATEGORIES.get(entry.getKey());
             if (type != null) {
-                adder.add(type, List.of(entry.getValue()));
-                count++;
+                adder.add(type, entry.getValue());
+                count += entry.getValue().size();
             }
         }
         return count;
     }
-
-    /** 从 classpath 加载并注册 */
-    /* TEMP: 暂时注释，用于测试网络同步
-    private static int loadAndRegisterFromClasspath(IRecipeRegistration registration) {
-        Set<String> seenNames = new HashSet<>();
-        int count = 0;
-
-        for (String path : RECIPE_PATHS) {
-            try (var in = MagicIOJeiPlugin.class.getClassLoader().getResourceAsStream(path)) {
-                if (in == null) continue;
-                var recipe = ZhenRecipeLoader.loadRecipeFromJson(in, null);
-                if (recipe == null) continue;
-                String name = baseName(recipe);
-                if ("forge".equals(name) || !seenNames.add(name)) continue;
-                IRecipeType<ZhenRecipe> type = CATEGORIES.get(name);
-                if (type != null) {
-                    registration.addRecipes(type, List.of(recipe));
-                    count++;
-                }
-            } catch (Exception ignored) {}
-        }
-        return count;
-    }
-    */
 
     @SuppressWarnings("unchecked")
     private static boolean hasLootOutput(ZhenRecipe recipe) {

@@ -9,15 +9,10 @@ import cn.yhzcake.magicio.block.gridcell.GridCellSideProcessor;
 import cn.yhzcake.magicio.block.zhen.ZhenType;
 import cn.yhzcake.magicio.block.zhen.ZhenTypes;
 import cn.yhzcake.magicio.io.AbstractSideProcessor;
-import cn.yhzcake.magicio.io.FluidIOComponent;
-import cn.yhzcake.magicio.io.FluidStackWithTank;
-import cn.yhzcake.magicio.io.IOComponent;
-import cn.yhzcake.magicio.io.ModIOTypes;
 import cn.yhzcake.magicio.io.SideProcessor;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.core.HolderLookup;
-import net.minecraft.core.NonNullList;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.protocol.Packet;
 import net.minecraft.network.protocol.game.ClientGamePacketListener;
@@ -54,17 +49,19 @@ public class ZhenBusBlockEntity extends BlockEntity implements ZhenBusHost {
         container.remove(d); markForUpdate(); if (container.isEmpty()) destroyBusBlock();
     }
     private void destroyBusBlock() {
-        // 物品掉落由 setRemoved() 统一处理
         if (level != null && !level.isClientSide()) {
             level.destroyBlock(worldPosition, false);
         }
     }
 
     @Override
-    public void setRemoved() {
-        // 不掉落物品——掉落统一由 ZhenBusBlock.playerDestroy() 处理。
-        // 重载世界时 setRemoved 会被调用但不应触发掉落，否则数据仍在 NBT 中而物品已在地面。
-        super.setRemoved();
+    public void preRemoveSideEffects(BlockPos pos, BlockState state) {
+        if (level != null && !level.isClientSide()) {
+            for (ItemStack drop : container.collectDrops()) {
+                net.minecraft.world.level.block.Block.popResource(level, pos, drop);
+            }
+        }
+        super.preRemoveSideEffects(pos, state);
     }
     @Override public void markForUpdate() { setChanged(); if (level != null) level.sendBlockUpdated(worldPosition, getBlockState(), getBlockState(), 3); }
     @Override public void markForSave() { setChanged(); }
@@ -84,25 +81,8 @@ public class ZhenBusBlockEntity extends BlockEntity implements ZhenBusHost {
             if (p == null) continue;
             ValueOutput child = output.child(d.getName());
             child.putString("type", p.getZhenType().getType());
-            child.putInt("processing_time", p.getProcessTime());
-            // 持久化所有 IOType 组件（Fluid 单独处理以使用 Fluids 列表格式）
-            for (IOComponent<?, ?> component : p.getIOProcessor().getAll()) {
-                if (component.type() == ModIOTypes.FLUID.get()) continue;
-                component.saveNBT(child);
-            }
-            // Fluids — 列表格式 [{tank, fluid}]
-            Object rawFluid = p.getIOProcessor().get(ModIOTypes.FLUID.get());
-            if (rawFluid instanceof FluidIOComponent fluidIO) {
-                NonNullList<FluidStack> tanks = fluidIO.getTanks();
-                List<FluidStackWithTank> entries = new ArrayList<>();
-                for (int i = 0; i < tanks.size(); i++) {
-                    if (!tanks.get(i).isEmpty()) {
-                        entries.add(new FluidStackWithTank(i, tanks.get(i).copy()));
-                    }
-                }
-                if (!entries.isEmpty()) {
-                    child.store("Fluids", FluidStackWithTank.CODEC.listOf(), entries);
-                }
+            if (p instanceof AbstractSideProcessor ap) {
+                ap.writeToNBT(child);
             }
         }
     }
@@ -113,33 +93,19 @@ public class ZhenBusBlockEntity extends BlockEntity implements ZhenBusHost {
 
         // 非 pending 路径（level != null）：直接创建处理器并恢复
         if (level != null) {
+            if (level.isClientSide()) {
+                applyClientUpdate(input);
+                return;
+            }
             for (Direction d : Direction.values()) {
                 input.child(d.getName()).ifPresent(child -> {
                     String type = child.getString("type").orElse("");
                     if (type.isEmpty()) return;
-                    ZhenType zhenType = ZhenTypes.getType(type);
+                    ZhenType zhenType = ZhenTypes.getTypeStrict(type);
                     if (zhenType == null) return;
                     SideProcessor p = createProcessorForType(d, zhenType, worldPosition, level);
-                    p.setProcessTime(child.getIntOr("processing_time", 0));
-                    p.setInputsChanged(true);
-                    // 仅 AbstractSideProcessor 子类才有 IOProcessor，跳过 GridCellSideProcessor
                     if (p instanceof AbstractSideProcessor ap) {
-                        for (IOComponent<?, ?> component : ap.getIOProcessor().getAll()) {
-                            if (component.type() == ModIOTypes.FLUID.get()) continue;
-                            component.loadNBT(child);
-                        }
-                        // Fluids
-                        Object rawFluid = ap.getIOProcessor().get(ModIOTypes.FLUID.get());
-                        if (rawFluid instanceof FluidIOComponent fluidIO) {
-                            NonNullList<FluidStack> tanks = fluidIO.getTanks();
-                            child.read("Fluids", FluidStackWithTank.CODEC.listOf()).ifPresent(list -> {
-                                for (FluidStackWithTank entry : list) {
-                                    if (entry.tank() >= 0 && entry.tank() < tanks.size()) {
-                                        tanks.set(entry.tank(), entry.fluid().copy());
-                                    }
-                                }
-                            });
-                        }
+                        ap.readFromNBT(child);
                     }
                     p.onAdd();
                     p.setChangeCallback(container.getChangeCallback());
@@ -157,25 +123,68 @@ public class ZhenBusBlockEntity extends BlockEntity implements ZhenBusHost {
                 if (type.isEmpty()) return;
                 CompoundTag sideTag = new CompoundTag();
                 sideTag.putString("type", type);
-                sideTag.putInt("processing_time", child.getIntOr("processing_time", 0));
-                // Items — ContainerHelper 格式 (ItemStackWithSlot)
+                sideTag.putInt("process_time", child.getIntOr("process_time", 0));
+                sideTag.putBoolean("inputs_changed", child.getBooleanOr("inputs_changed", false));
+                sideTag.putInt("effective_processing_time", child.getIntOr("effective_processing_time", 0));
+                sideTag.putDouble("output_multiplier", child.getDoubleOr("output_multiplier", 1.0));
+                sideTag.putInt("last_input_hash", child.getIntOr("last_input_hash", 0));
+                sideTag.putInt("recipe_generation", child.getIntOr("recipe_generation", 0));
+                sideTag.putInt("recipe_check_timer", child.getIntOr("recipe_check_timer", 0));
+                sideTag.putLong("state_revision", child.getLongOr("state_revision", 0));
+                sideTag.putLong("cycle_id", child.getLongOr("cycle_id", 0));
+                sideTag.putBoolean("output_blocked", child.getBooleanOr("output_blocked", false));
+                // Items — ContainerHelper 格式 (ItemStackWithSlot 索引格式)
                 child.list("Items", ItemStackWithSlot.CODEC).ifPresent(list -> {
                     List<ItemStackWithSlot> copy = new ArrayList<>();
                     list.forEach(copy::add);
                     sideTag.store("Items", ItemStackWithSlot.CODEC.listOf(), copy);
                 });
-                // Fluids — 列表格式 [{tank, fluid}]
-                child.read("Fluids", FluidStackWithTank.CODEC.listOf()).ifPresent(list -> {
-                    sideTag.store("Fluids", FluidStackWithTank.CODEC.listOf(), list);
-                });
+                // Fluids — FluidTank_N 格式
+                for (int i = 0; i < 64; i++) {
+                    final int idx = i;
+                    child.read("FluidTank_" + idx, FluidStack.CODEC).ifPresent(fs ->
+                            sideTag.store("FluidTank_" + idx, FluidStack.CODEC, fs));
+                }
                 // Energy
-                int energy = child.getIntOr("energy", 0);
-                if (energy > 0) sideTag.putInt("energy", energy);
+                child.getInt("energy").ifPresent(e -> sideTag.putInt("energy", e));
+                child.getString("current_recipe_id").ifPresent(cr ->
+                        sideTag.putString("current_recipe_id", cr));
+                child.getString("last_valid_recipe_id").ifPresent(cr ->
+                        sideTag.putString("last_valid_recipe_id", cr));
                 tag.put(d.getName(), sideTag);
             });
         }
         if (!tag.isEmpty()) {
             pendingNbt = tag;
+        }
+    }
+
+    private void applyClientUpdate(ValueInput input) {
+        for (Direction d : Direction.values()) {
+            var child = input.child(d.getName());
+            if (child.isEmpty() || !child.get().getBooleanOr("present", false)) {
+                container.getStorage().remove(d);
+                continue;
+            }
+            ValueInput state = child.get();
+            String typeName = state.getString("type").orElse("");
+            ZhenType zhenType = ZhenTypes.getTypeStrict(typeName);
+            if (zhenType == null) {
+                container.getStorage().remove(d);
+                continue;
+            }
+            SideProcessor existing = container.get(d);
+            if (existing == null || existing.getZhenType() != zhenType) {
+                if (existing != null) existing.onRemove();
+                existing = createProcessorForType(d, zhenType, worldPosition, level);
+                existing.setChangeCallback(() -> {});
+                container.getStorage().set(d, existing);
+            }
+            if (existing instanceof AbstractSideProcessor ap) {
+                ap.applyClientState(
+                        state.getIntOr("process_time", 0),
+                        state.getBooleanOr("has_recipe", false));
+            }
         }
     }
 
@@ -195,35 +204,17 @@ public class ZhenBusBlockEntity extends BlockEntity implements ZhenBusHost {
             if (sideTag.isEmpty()) continue;
             String tn = sideTag.getString("type").orElse("");
             if (tn.isEmpty()) continue;
-            ZhenType type = ZhenTypes.getType(tn);
+            ZhenType type = ZhenTypes.getTypeStrict(tn);
             if (type == null) continue;
 
             SideProcessor p = createProcessorForType(d, type, worldPosition, level);
-            p.setProcessTime(sideTag.getIntOr("processing_time", 0));
-            p.setInputsChanged(true);
             p.onAdd();
             p.setChangeCallback(container.getChangeCallback());
 
             if (p instanceof AbstractSideProcessor ap) {
-                // 恢复 IOType 组件
                 ValueInput childInput = TagValueInput.create(
                         ProblemReporter.DISCARDING, level.registryAccess(), sideTag);
-                for (IOComponent<?, ?> component : ap.getIOProcessor().getAll()) {
-                    if (component.type() == ModIOTypes.FLUID.get()) continue;
-                    component.loadNBT(childInput);
-                }
-                // Fluids
-                Object rawFluid = ap.getIOProcessor().get(ModIOTypes.FLUID.get());
-                if (rawFluid instanceof FluidIOComponent fluidIO) {
-                    NonNullList<FluidStack> tanks = fluidIO.getTanks();
-                    sideTag.read("Fluids", FluidStackWithTank.CODEC.listOf()).ifPresent(list -> {
-                        for (FluidStackWithTank entry : list) {
-                            if (entry.tank() >= 0 && entry.tank() < tanks.size()) {
-                                tanks.set(entry.tank(), entry.fluid().copy());
-                            }
-                        }
-                    });
-                }
+                ap.readFromNBT(childInput);
             }
 
             container.getStorage().set(d, p);

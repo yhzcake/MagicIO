@@ -3,12 +3,18 @@
   "zhen_type": "magic_io:unstable_cinder_zhen",
   "inputs": {
     "item_input_all": [
-      {"item": "minecraft:coal", "count": 1}
+      {
+        "count": 1,
+        "item": "minecraft:coal"
+      }
     ]
   },
   "outputs": {
     "item_output_all": [
-      {"item": "magic_io:coal_coke", "count": 1}
+      {
+        "item": "magic_io:coal_coke",
+        "count": 1
+      }
     ]
   },
   "processing_time": 100

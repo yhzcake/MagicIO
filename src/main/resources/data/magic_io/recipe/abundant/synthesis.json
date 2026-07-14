@@ -2,10 +2,24 @@
   "type": "magic_io:zhen_block",
   "zhen_type": "magic_io:abundant_synthesis_zhen",
   "inputs": {
-    "item_input_all": [{"item": "minecraft:redstone", "count": 1}, {"item": "minecraft:glowstone_dust", "count": 1}]
+    "item_input_all": [
+      {
+        "count": 1,
+        "item": "minecraft:redstone"
+      },
+      {
+        "count": 1,
+        "item": "minecraft:glowstone_dust"
+      }
+    ]
   },
   "outputs": {
-    "item_output_all": [{"item": "minecraft:comparator", "count": 2}]
+    "item_output_all": [
+      {
+        "item": "minecraft:comparator",
+        "count": 2
+      }
+    ]
   },
   "processing_time": 160
 }

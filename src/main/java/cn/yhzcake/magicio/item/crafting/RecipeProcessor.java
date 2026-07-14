@@ -7,22 +7,24 @@ import cn.yhzcake.magicio.MagicIO;
 import cn.yhzcake.magicio.block.inventory.SlotPartition;
 import cn.yhzcake.magicio.block.inventory.SlotZone;
 import cn.yhzcake.magicio.block.zhen.ZhenLevel;
-import cn.yhzcake.magicio.io.FluidIOComponent;
+import cn.yhzcake.magicio.io.IOComponent;
 import cn.yhzcake.magicio.io.IOProcessor;
+import cn.yhzcake.magicio.io.IOType;
+import cn.yhzcake.magicio.io.IOTypeDescriptor;
+import cn.yhzcake.magicio.io.IOTypeDescriptors;
 import cn.yhzcake.magicio.io.ModIOTypes;
-import cn.yhzcake.magicio.io.WorldDropIOComponent;
+import cn.yhzcake.magicio.io.WorldDropSink;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.core.NonNullList;
+import net.minecraft.resources.Identifier;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.item.ItemStack;
-import net.minecraft.world.item.crafting.Ingredient;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.phys.Vec3;
 import net.neoforged.neoforge.fluids.FluidStack;
 
-@SuppressWarnings("unchecked")
 public class RecipeProcessor {
 
     private static final int PROCESS_COLL_SPEED = 2;
@@ -40,6 +42,11 @@ public class RecipeProcessor {
         public double outputMultiplier = 1.0;
         /** 上次检查时的输入哈希值（用于避免输入未变化时的重复扫描） */
         public int lastInputHash = 0;
+        /** 捕获配方版本号，用于检测重载后旧配方引用失效 */
+        public int recipeGeneration = 0;
+        public long stateRevision = 0;
+        public long cycleId = 0;
+        public boolean outputBlocked = false;
     }
 
     /**
@@ -57,9 +64,8 @@ public class RecipeProcessor {
      * @param zoneFaceAccess 区域-面映射（用于 DROP_OUTPUT 方向）
      * @param centerDrop    是否在方块正中心掉落（false 则在 DROP_OUTPUT 面外侧掉落）
      * @param onChanged     数据变更回调（标记脏数据）
-     * @return true 表示需要网络同步（方块外观变更）
      */
-    public static boolean processTick(
+    public static void processTick(
             Level level,
             BlockPos pos,
             State state,
@@ -72,22 +78,24 @@ public class RecipeProcessor {
             boolean centerDrop,
             Runnable onChanged
     ) {
-        boolean needSync = false;
+        Identifier previousRecipeId = state.currentRecipe == null ? null : state.currentRecipe.getRecipeId();
+        long previousCycleId = state.cycleId;
+        boolean previousOutputBlocked = state.outputBlocked;
 
         // 阶段一：没有配方 → 间隔检查（避免每 tick 扫描全部配方）
         if (state.currentRecipe == null) {
             state.recipeCheckTimer++;
             if (state.inputsChanged || state.recipeCheckTimer >= RECIPE_RECHECK_INTERVAL) {
                 state.recipeCheckTimer = 0;
-                if (state.inputsChanged && findRecipeFromCache(state, zhenType, items, tanks, partition, level)) {
+                if (state.inputsChanged && findRecipeFromCache(state, zhenType, ioProcessor, partition, level)) {
                     MagicIO.LOGGER.trace("[{}] processTick: restored recipe {} from cache", pos.toShortString(), state.currentRecipe.getZhenTypeStr());
-                    needSync = true;
+                    state.recipeGeneration = ZhenRecipeManager.getRecipeGeneration();
                 }
                 if (state.currentRecipe == null) {
-                    tryFindNewRecipe(state, zhenType, items, tanks, partition, level);
+                    tryFindNewRecipe(state, zhenType, ioProcessor, partition, level);
                     if (state.currentRecipe != null) {
                         MagicIO.LOGGER.trace("[{}] processTick: found new recipe {} ({} ticks)", pos.toShortString(), state.currentRecipe.getZhenTypeStr(), state.currentRecipe.getProcessingTime());
-                        needSync = true;
+                        state.recipeGeneration = ZhenRecipeManager.getRecipeGeneration();
                     }
                 }
             }
@@ -95,23 +103,32 @@ public class RecipeProcessor {
 
         // 阶段二：有配方 → 推进进度
         if (state.currentRecipe != null) {
+            // 检查配方版本：资源重载后管理器版本递增，机器旧引用应失效
+            if (state.recipeGeneration != ZhenRecipeManager.getRecipeGeneration()) {
+                MagicIO.LOGGER.trace("[{}] processTick: recipe generation changed ({} vs {}), invalidating",
+                        pos.toShortString(), state.recipeGeneration, ZhenRecipeManager.getRecipeGeneration());
+                state.currentRecipe = null;
+                state.lastValidRecipe = null;
+                state.processTime = 0;
+                state.inputsChanged = true;
+                state.recipeGeneration = 0;
+                state.outputBlocked = false;
+            }
+
             // 检查输入是否仍然匹配（含等级检查）
-            if (state.inputsChanged) {
+            if (state.inputsChanged && state.currentRecipe != null) {
                 if (!isRecipeLevelAllowed(state.currentRecipe, zhenType)
-                        || !state.currentRecipe.matches(items, partition, level)
-                        || !state.currentRecipe.matchesFluid(tanks, partition)) {
+                        || !state.currentRecipe.matchesAll(ioProcessor, partition, level)) {
                     MagicIO.LOGGER.trace("[{}] processTick: recipe {} no longer valid (level/input/fluid mismatch), aborting", pos.toShortString(), state.currentRecipe.getZhenTypeStr());
                     state.currentRecipe = null;
                     state.processTime = 0;
                     state.inputsChanged = false;
-                    needSync = true;
+                    state.outputBlocked = false;
                 }
             }
 
             if (state.currentRecipe != null) {
                 state.processTime += 1;
-                needSync = true;
-
                 // 配方完成
                 if (state.processTime >= state.effectiveProcessingTime) {
                     MagicIO.LOGGER.trace("[{}] processTick: recipe {} complete! attempting to produce output...", pos.toShortString(), state.currentRecipe.getZhenTypeStr());
@@ -119,39 +136,57 @@ public class RecipeProcessor {
                         MagicIO.LOGGER.trace("[{}] processTick: recipe {} output produced successfully", pos.toShortString(), state.currentRecipe.getZhenTypeStr());
                         // 配方成功：保持 currentRecipe，仅重置进度，继续加工（避免重新遍历配方列表）
                         state.processTime = 0;
+                        state.outputBlocked = false;
+                        state.cycleId++;
                     } else {
                         MagicIO.LOGGER.trace("[{}] processTick: recipe {} output FAILED (output full?), backing off by {} ticks", pos.toShortString(), state.currentRecipe.getZhenTypeStr(), PROCESS_COLL_SPEED);
                         state.processTime = Math.max(0, state.processTime - PROCESS_COLL_SPEED);
                         state.inputsChanged = true;
+                        state.outputBlocked = true;
                     }
                 }
             }
         } else if (state.processTime > 0) {
             // 没有配方时缓慢衰减进度
             state.processTime = Math.max(0, state.processTime - PROCESS_COLL_SPEED);
-            needSync = true;
         }
 
-        return needSync;
+        Identifier currentRecipeId = state.currentRecipe == null ? null : state.currentRecipe.getRecipeId();
+        boolean stateChanged = !java.util.Objects.equals(previousRecipeId, currentRecipeId)
+                || previousCycleId != state.cycleId
+                || previousOutputBlocked != state.outputBlocked;
+        if (stateChanged) {
+            state.stateRevision++;
+        }
+        if (stateChanged || state.currentRecipe != null || state.processTime > 0) onChanged.run();
+    }
+
+    public static ProcessingStateSnapshot snapshot(State state) {
+        ProcessingPhase phase = state.currentRecipe == null
+                ? ProcessingPhase.IDLE
+                : state.outputBlocked ? ProcessingPhase.OUTPUT_BLOCKED : ProcessingPhase.RUNNING;
+        return new ProcessingStateSnapshot(
+                state.stateRevision,
+                state.cycleId,
+                phase,
+                state.currentRecipe == null ? null : state.currentRecipe.getRecipeId(),
+                state.processTime,
+                state.effectiveProcessingTime);
     }
 
     /**
      * 计算当前输入状态的哈希值。
-     * 仅基于物品 ID 和数量，不依赖 NBT（Ingredient.test 也不检查 NBT）。
+     * 通过 IOTypeDescriptor 统一计算各 IOType 的输入哈希。
      * 用于在输入未变化时跳过完整的配方扫描。
      */
-    private static int computeInputHash(NonNullList<ItemStack> items, NonNullList<FluidStack> tanks,
-            SlotPartition partition) {
+    private static int computeInputHash(IOProcessor ioProcessor, SlotPartition partition) {
         int hash = 1;
-        for (int slot : partition.getAllSlots(ModIOTypes.ITEM.get())) {
-            ItemStack stack = items.get(slot);
-            hash = 31 * hash + (stack.isEmpty() ? 0 : System.identityHashCode(stack.getItem()));
-            hash = 31 * hash + (stack.isEmpty() ? 0 : stack.getCount());
-        }
-        for (int slot : partition.getAllSlots(ModIOTypes.FLUID.get())) {
-            FluidStack fluid = tanks.get(slot);
-            hash = 31 * hash + (fluid.isEmpty() ? 0 : System.identityHashCode(fluid.getFluid()));
-            hash = 31 * hash + (fluid.isEmpty() ? 0 : fluid.getAmount());
+        for (IOType type : IOTypeDescriptors.getRegisteredTypes()) {
+            IOTypeDescriptor descriptor = IOTypeDescriptors.get(type);
+            if (descriptor == null) continue;
+            IOComponent<?, ?> component = ioProcessor.get(type);
+            if (component == null) continue;
+            hash = 31 * hash + descriptor.computeHash(component, partition);
         }
         return hash;
     }
@@ -160,7 +195,7 @@ public class RecipeProcessor {
      * 检查配方的等级是否不超过实际阵的等级。
      * 如果配方 zhen_type 的等级高于当前阵的等级，返回 false 禁止加工。
      */
-    private static boolean isRecipeLevelAllowed(ZhenRecipe recipe, String zhenType) {
+    public static boolean isRecipeLevelAllowed(ZhenRecipe recipe, String zhenType) {
         String recipePath = recipe.getZhenTypeId().getPath();
         ZhenLevel recipeLevel = ZhenLevel.fromFullId(recipePath);
         String zhenPath = zhenType.contains(":") ? zhenType.substring(zhenType.indexOf(':') + 1) : zhenType;
@@ -174,48 +209,69 @@ public class RecipeProcessor {
     // ============ 阶段一辅助 ============
 
     private static boolean findRecipeFromCache(State state, String zhenType,
-            NonNullList<ItemStack> items, NonNullList<FluidStack> tanks,
+            IOProcessor ioProcessor,
             SlotPartition partition, Level level) {
         if (state.lastValidRecipe == null) return false;
         if (!isRecipeLevelAllowed(state.lastValidRecipe, zhenType)) {
             state.lastValidRecipe = null;
             return false;
         }
-        if (state.lastValidRecipe.matches(items, partition, level)
-                && state.lastValidRecipe.matchesFluid(tanks, partition)) {
-            state.currentRecipe = state.lastValidRecipe;
+        ZhenRecipe cached = resolveCurrentRecipe(state.lastValidRecipe, zhenType);
+        if (cached == null) {
+            state.lastValidRecipe = null;
+            return false;
+        }
+        state.lastValidRecipe = cached;
+        if (cached.matchesAll(ioProcessor, partition, level)) {
+            state.currentRecipe = cached;
             computeEffectiveValues(state, zhenType);
             state.processTime = 0;
             state.inputsChanged = false;
+            state.outputBlocked = false;
             return true;
         }
         state.lastValidRecipe = null;
         return false;
     }
 
+    private static ZhenRecipe resolveCurrentRecipe(ZhenRecipe cached, String zhenType) {
+        for (ZhenRecipe r : ZhenRecipeManager.getInstance().getRecipes(zhenType)) {
+            if (r.getRecipeId().equals(cached.getRecipeId())
+                    && r.getZhenTypeStr().equals(cached.getZhenTypeStr())) {
+                return r;
+            }
+        }
+        return null;
+    }
+
     private static void tryFindNewRecipe(State state, String zhenType,
-            NonNullList<ItemStack> items, NonNullList<FluidStack> tanks,
+            IOProcessor ioProcessor,
             SlotPartition partition, Level level) {
-        int currentHash = computeInputHash(items, tanks, partition);
+        int currentHash = computeInputHash(ioProcessor, partition);
         // 输入未变化且上次缓存的配方仍然有效：直接复用，跳过线性扫描
-        if (currentHash == state.lastInputHash && state.lastValidRecipe != null
-                && state.lastValidRecipe.matchesFluid(tanks, partition)) {
-            state.currentRecipe = state.lastValidRecipe;
+        ZhenRecipe cached = state.lastValidRecipe == null
+                ? null : resolveCurrentRecipe(state.lastValidRecipe, zhenType);
+        if (currentHash == state.lastInputHash && cached != null
+                && isRecipeLevelAllowed(cached, zhenType)
+                && cached.matchesAll(ioProcessor, partition, level)) {
+            state.lastValidRecipe = cached;
+            state.currentRecipe = cached;
             computeEffectiveValues(state, zhenType);
             state.processTime = 0;
             state.inputsChanged = false;
+            state.outputBlocked = false;
             return;
         }
 
         ZhenRecipe newRecipe = ZhenRecipeManager.getInstance().findRecipe(
-                zhenType, items, partition, level);
-        if (newRecipe != null && newRecipe.matchesFluid(tanks, partition)
-                && isRecipeLevelAllowed(newRecipe, zhenType)) {
+                zhenType, ioProcessor, partition, level);
+        if (newRecipe != null && isRecipeLevelAllowed(newRecipe, zhenType)) {
             state.currentRecipe = newRecipe;
             computeEffectiveValues(state, zhenType);
             state.lastValidRecipe = newRecipe;
             state.processTime = 0;
             state.inputsChanged = false;
+            state.outputBlocked = false;
         } else {
             state.lastValidRecipe = null;
         }
@@ -225,8 +281,9 @@ public class RecipeProcessor {
     /**
      * 根据配方所在等级和实际阵等级的差值，计算有效加工时长和产出倍率。
      * 同时叠加 RecipeModifiers 的贡献。
+     * 公开方法，供方块实体从 NBT 恢复配方后重新计算有效参数。
      */
-    private static void computeEffectiveValues(State state, String zhenType) {
+    public static void computeEffectiveValues(State state, String zhenType) {
         if (state.currentRecipe == null) {
             state.effectiveProcessingTime = 0;
             state.outputMultiplier = 1.0;
@@ -284,92 +341,77 @@ public class RecipeProcessor {
         }
 
         MagicIO.LOGGER.trace("[{}] tryCompleteRecipe: rolling outputs for recipe {}...", pos.toShortString(), recipe.getZhenTypeStr());
-        Map<String, NonNullList<ItemStack>> zoneOutputs = recipe.rollOutput(serverLevel);
-        // 应用产出倍率
+        Map<IOType, Map<String, NonNullList<?>>> allOutputs = recipe.rollAllOutputs(serverLevel);
+
+        // 应用产出倍率（仅 ITEM 型产出受倍率影响）
         if (state.outputMultiplier != 1.0) {
-            for (NonNullList<ItemStack> stacks : zoneOutputs.values()) {
-                for (int i = 0; i < stacks.size(); i++) {
-                    ItemStack stack = stacks.get(i);
-                    if (!stack.isEmpty()) {
-                        int newCount = (int) Math.round(stack.getCount() * state.outputMultiplier);
-                        if (newCount < 1) newCount = 1;
-                        stack.setCount(newCount);
+            Map<String, NonNullList<?>> itemOutputs = allOutputs.get(ModIOTypes.ITEM.get());
+            if (itemOutputs != null) {
+                for (NonNullList<?> stacks : itemOutputs.values()) {
+                    for (int i = 0; i < stacks.size(); i++) {
+                        Object obj = stacks.get(i);
+                        if (obj instanceof ItemStack stack) {
+                            int newCount = (int) Math.round(stack.getCount() * state.outputMultiplier);
+                            if (newCount < 1) newCount = 1;
+                            stack.setCount(newCount);
+                        }
                     }
                 }
             }
         }
-        Map<String, NonNullList<FluidStack>> fluidOutputs = recipe.rollFluidOutput();
-        MagicIO.LOGGER.trace("[{}] tryCompleteRecipe: zoneOutputs={}, fluidOutputs={}", pos.toShortString(), zoneOutputs, fluidOutputs);
 
-        // 获取实际流体罐容量
-        int tankCapacity = 0;
-        Object rawFluid = ioProcessor.get(ModIOTypes.FLUID.get());
-        if (rawFluid instanceof FluidIOComponent fluidComp) {
-            Integer cap = fluidComp.getTankCapacity();
-            if (cap != null) tankCapacity = cap;
-        }
+        // 获取 ITEM 掉落专用输出映射（用于掉落出口检查）
+        Map<String, NonNullList<ItemStack>> dropOutputs = extractDropOutputs(allOutputs);
 
-        // 预检：所有输入输出是否可满足
+        MagicIO.LOGGER.trace("[{}] tryCompleteRecipe: allOutputs={}", pos.toShortString(), allOutputs);
+
+        // 预检：配方要求的 IOComponent 和 Zone 是否存在
         if (!canProcess(recipe, partition, ioProcessor)) {
             MagicIO.LOGGER.trace("[{}] tryCompleteRecipe: FAILED canProcess (missing IO or Zone)", pos.toShortString());
             return false;
         }
-        if (!canFitAllZoneItems(zoneOutputs, partition, items, ioProcessor)) {
-            MagicIO.LOGGER.trace("[{}] tryCompleteRecipe: FAILED canFitAllZoneItems (output full?)", pos.toShortString());
+
+        // 先检查世界掉落出口是否可用（避免消耗输入后掉落被阻挡而损失物品）
+        if (!canDropToWorld(dropOutputs, zoneFaceAccess, level, pos, centerDrop)) {
+            MagicIO.LOGGER.trace("[{}] tryCompleteRecipe: FAILED canDropToWorld (drop direction blocked)", pos.toShortString());
             return false;
         }
-        if (!canConsumeAllZoneItems(recipe, partition, items)) {
-            MagicIO.LOGGER.trace("[{}] tryCompleteRecipe: FAILED canConsumeAllZoneItems (input missing?)", pos.toShortString());
-            return false;
-        }
-        if (!canFitFluidZoneOutputs(fluidOutputs, partition, tanks, tankCapacity)) {
-            MagicIO.LOGGER.trace("[{}] tryCompleteRecipe: FAILED canFitFluidZoneOutputs (tankCapacity={}, fluidOutputs={})", pos.toShortString(), tankCapacity, fluidOutputs);
-            return false;
-        }
-        if (!canConsumeAllFluids(recipe, partition, tanks)) {
-            MagicIO.LOGGER.trace("[{}] tryCompleteRecipe: FAILED canConsumeAllFluids", pos.toShortString());
+
+        // 事务性验证：通过 IOTypeDescriptor 在快照上模拟全部消耗和产出
+        if (!validateTransaction(recipe, partition, ioProcessor, allOutputs)) {
+            MagicIO.LOGGER.trace("[{}] tryCompleteRecipe: FAILED validateTransaction (insufficient input or output space)", pos.toShortString());
             return false;
         }
         MagicIO.LOGGER.trace("[{}] tryCompleteRecipe: all checks passed, executing...", pos.toShortString());
 
-        // 执行消耗
+        // 通过 IOTypeDescriptor 统一执行消耗
         for (RecipeInput<?> input : recipe.getInputs()) {
-            if (input.type() == ModIOTypes.ITEM.get()) {
-                SlotZone zone = partition.getZoneByName(input.zoneName());
-                if (zone != null) {
-                    consumeItemInZone(zone, (NonNullList<Ingredient>) input.requirement(), partition, items);
-                }
-            } else if (input.type() == ModIOTypes.FLUID.get()) {
-                SlotZone zone = partition.getZoneByName(input.zoneName());
-                if (zone != null) {
-                    consumeFluidInZone(zone, (NonNullList<ZhenRecipe.FluidIngredient>) input.requirement(), partition, tanks);
-                }
+            IOTypeDescriptor descriptor = IOTypeDescriptors.get(input.type());
+            if (descriptor == null) continue;
+            IOComponent<?, ?> component = ioProcessor.get(input.type());
+            if (component == null) continue;
+            SlotZone zone = partition.getZoneByName(input.zoneName());
+            if (zone != null) {
+                descriptor.commitConsume(component, zone, input.requirement(), partition);
             }
         }
 
-        // 执行产出
-        for (RecipeOutput<?> output : recipe.getOutputs()) {
-            if (output.zoneName().equals(SlotZone.DROP_OUTPUT.getName())) {
-                handleDropOutput(level, pos, zoneOutputs, zoneFaceAccess, centerDrop);
-            } else if (output.type() == ModIOTypes.ITEM.get()) {
-                SlotZone zone = partition.getZoneByName(output.zoneName());
-                if (zone != null) {
-                    NonNullList<ItemStack> outputItems = zoneOutputs.get(output.zoneName());
-                    if (outputItems != null) {
-                        produceItemInZone(zone, outputItems, partition, items);
-                    }
-                }
-            } else if (output.type() == ModIOTypes.FLUID.get()) {
-                SlotZone zone = partition.getZoneByName(output.zoneName());
-                if (zone != null) {
-                    NonNullList<FluidStack> outputFluids = fluidOutputs.get(output.zoneName());
-                    if (outputFluids != null) {
-                        produceFluidInZone(zone, outputFluids, partition, tanks, tankCapacity);
-                        MagicIO.LOGGER.trace("[{}] tryCompleteRecipe: produced fluid in zone {}", pos.toShortString(), output.zoneName());
-                    }
-                }
+        // 按聚合后的 IOType 和 Zone 统一提交产出
+        for (Map.Entry<IOType, Map<String, NonNullList<?>>> typeEntry : allOutputs.entrySet()) {
+            IOTypeDescriptor descriptor = IOTypeDescriptors.get(typeEntry.getKey());
+            if (descriptor == null) continue;
+            IOComponent<?, ?> component = ioProcessor.get(typeEntry.getKey());
+            if (component == null) continue;
+            for (Map.Entry<String, NonNullList<?>> zoneEntry : typeEntry.getValue().entrySet()) {
+                if (zoneEntry.getKey().equals(SlotZone.DROP_OUTPUT.getName())) continue;
+                SlotZone zone = partition.getZoneByName(zoneEntry.getKey());
+                if (zone == null || zoneEntry.getValue().isEmpty()) continue;
+                descriptor.commitProduce(component, zone, zoneEntry.getValue(), partition);
+                MagicIO.LOGGER.trace("[{}] tryCompleteRecipe: produced {} in zone {}", pos.toShortString(), typeEntry.getKey(), zoneEntry.getKey());
             }
         }
+
+        handleDropOutput(level, pos, dropOutputs, zoneFaceAccess, centerDrop);
 
         if (onChanged != null) onChanged.run();
         MagicIO.LOGGER.trace("[{}] tryCompleteRecipe: SUCCESS", pos.toShortString());
@@ -390,223 +432,118 @@ public class RecipeProcessor {
         return true;
     }
 
-    // ============ 物品相关 ============
+    /**
+     * 事务性验证：通过 IOTypeDescriptor 创建快照并在快照上模拟全部消耗和产出。
+     * 全部通过才返回 true，真实状态不受任何影响。
+     * <p>
+     * 新增 IOType 时只需实现对应的 {@link IOTypeDescriptor} 并注册到
+     * {@link IOTypeDescriptors}，无需修改此方法。
+     */
+    private static boolean validateTransaction(
+            ZhenRecipe recipe, SlotPartition partition,
+            IOProcessor ioProcessor,
+            Map<IOType, Map<String, NonNullList<?>>> allOutputs) {
 
-    public static boolean canFitItem(SlotZone zone, NonNullList<ItemStack> outputs,
-            SlotPartition partition, NonNullList<ItemStack> items) {
-        for (ItemStack stack : outputs) {
-            if (!stack.isEmpty() && !insertItemInZone(zone, stack.copy(), true, partition, items).isEmpty()) {
+        // 创建各 IOType 的快照
+        java.util.Map<IOType, Object> snapshots = new java.util.HashMap<>();
+        for (RecipeInput<?> input : recipe.getInputs()) {
+            IOType type = input.type();
+            if (snapshots.containsKey(type)) continue;
+            IOTypeDescriptor descriptor = IOTypeDescriptors.get(type);
+            if (descriptor == null) return false;
+            IOComponent<?, ?> component = ioProcessor.get(type);
+            if (component == null) return false;
+            snapshots.put(type, descriptor.createSnapshot(component));
+        }
+        for (RecipeOutput<?> output : recipe.getOutputs()) {
+            IOType type = output.type();
+            if (snapshots.containsKey(type)) continue;
+            IOTypeDescriptor descriptor = IOTypeDescriptors.get(type);
+            if (descriptor == null) continue;
+            IOComponent<?, ?> component = ioProcessor.get(type);
+            if (component == null) continue;
+            snapshots.put(type, descriptor.createSnapshot(component));
+        }
+
+        // 在快照上模拟所有输入消耗
+        for (RecipeInput<?> input : recipe.getInputs()) {
+            IOTypeDescriptor descriptor = IOTypeDescriptors.get(input.type());
+            if (descriptor == null) return false;
+            Object snapshot = snapshots.get(input.type());
+            if (snapshot == null) return false;
+            SlotZone zone = partition.getZoneByName(input.zoneName());
+            if (zone == null) return false;
+            if (!descriptor.simulateConsume(snapshot, zone, input.requirement(), partition)) {
                 return false;
             }
         }
-        return true;
-    }
 
-    private static boolean canFitAllZoneItems(Map<String, NonNullList<ItemStack>> zoneOutputs,
-            SlotPartition partition, NonNullList<ItemStack> items, IOProcessor ioProcessor) {
-        for (Map.Entry<String, NonNullList<ItemStack>> entry : zoneOutputs.entrySet()) {
-            if (entry.getKey().equals(SlotZone.DROP_OUTPUT.getName())) continue;
-            SlotZone zone = partition.getZoneByName(entry.getKey());
-            if (zone == null) return false;
-            if (!canFitItem(zone, entry.getValue(), partition, items)) return false;
-        }
-        return true;
-    }
-
-    public static boolean canConsumeItem(SlotZone zone, NonNullList<Ingredient> ingredients,
-            SlotPartition partition, NonNullList<ItemStack> items) {
-        for (Ingredient ingredient : ingredients) {
-            boolean found = false;
-            for (int slot : partition.getSlots(ModIOTypes.ITEM.get(), zone)) {
-                if (ingredient.test(items.get(slot))) {
-                    found = true;
-                    break;
-                }
-            }
-            if (!found) return false;
-        }
-        return true;
-    }
-
-    private static boolean canConsumeAllZoneItems(ZhenRecipe recipe,
-            SlotPartition partition, NonNullList<ItemStack> items) {
-        for (RecipeInput<?> input : recipe.getInputs()) {
-            if (input.type() == ModIOTypes.ITEM.get()) {
-                SlotZone zone = partition.getZoneByName(input.zoneName());
+        // 在消耗后的快照上按聚合键模拟所有产出
+        for (Map.Entry<IOType, Map<String, NonNullList<?>>> typeEntry : allOutputs.entrySet()) {
+            IOTypeDescriptor descriptor = IOTypeDescriptors.get(typeEntry.getKey());
+            if (descriptor == null) return false;
+            Object snapshot = snapshots.get(typeEntry.getKey());
+            if (snapshot == null) return false;
+            for (Map.Entry<String, NonNullList<?>> zoneEntry : typeEntry.getValue().entrySet()) {
+                if (zoneEntry.getKey().equals(SlotZone.DROP_OUTPUT.getName())) continue;
+                SlotZone zone = partition.getZoneByName(zoneEntry.getKey());
                 if (zone == null) return false;
-                if (!canConsumeItem(zone, (NonNullList<Ingredient>) input.requirement(), partition, items)) {
+                if (!zoneEntry.getValue().isEmpty()
+                        && !descriptor.simulateProduce(snapshot, zone, zoneEntry.getValue(), partition)) {
                     return false;
                 }
             }
         }
+
         return true;
     }
 
-    public static ItemStack insertItemInZone(SlotZone zone, ItemStack stack, boolean simulate,
-            SlotPartition partition, NonNullList<ItemStack> items) {
-        if (stack.isEmpty()) return ItemStack.EMPTY;
-        ItemStack remaining = stack.copy();
-
-        for (int slot : partition.getSlots(ModIOTypes.ITEM.get(), zone)) {
-            if (remaining.isEmpty()) break;
-            ItemStack existing = items.get(slot);
-            if (ItemStack.isSameItemSameComponents(existing, remaining)) {
-                int canInsert = Math.min(remaining.getCount(), existing.getMaxStackSize() - existing.getCount());
-                if (canInsert > 0) {
-                    if (!simulate) {
-                        existing.grow(canInsert);
-                    }
-                    remaining.shrink(canInsert);
+    /**
+     * 从统一产出映射中提取 DROP_OUTPUT 区域的 ITEM 产出。
+     */
+    private static Map<String, NonNullList<ItemStack>> extractDropOutputs(
+            Map<IOType, Map<String, NonNullList<?>>> allOutputs) {
+        Map<String, NonNullList<ItemStack>> dropOutputs = new java.util.LinkedHashMap<>();
+        Map<String, NonNullList<?>> itemOutputs = allOutputs.get(ModIOTypes.ITEM.get());
+        if (itemOutputs != null) {
+            NonNullList<?> drops = itemOutputs.get(SlotZone.DROP_OUTPUT.getName());
+            if (drops != null && !drops.isEmpty()) {
+                NonNullList<ItemStack> items = NonNullList.create();
+                for (Object obj : drops) {
+                    if (obj instanceof ItemStack stack) items.add(stack);
                 }
+                dropOutputs.put(SlotZone.DROP_OUTPUT.getName(), items);
             }
         }
-
-        for (int slot : partition.getSlots(ModIOTypes.ITEM.get(), zone)) {
-            if (remaining.isEmpty()) break;
-            ItemStack existing = items.get(slot);
-            if (existing.isEmpty()) {
-                if (!simulate) {
-                    items.set(slot, remaining.split(remaining.getCount()));
-                } else {
-                    remaining = ItemStack.EMPTY;
-                }
-            }
-        }
-
-        return remaining.isEmpty() ? ItemStack.EMPTY : remaining;
+        return dropOutputs;
     }
 
-    private static void consumeItemInZone(SlotZone zone, NonNullList<Ingredient> ingredients,
-            SlotPartition partition, NonNullList<ItemStack> items) {
-        for (Ingredient ingredient : ingredients) {
-            for (int slot : partition.getSlots(ModIOTypes.ITEM.get(), zone)) {
-                ItemStack existing = items.get(slot);
-                if (ingredient.test(existing)) {
-                    existing.shrink(1);
-                    if (existing.isEmpty()) {
-                        items.set(slot, ItemStack.EMPTY);
-                    }
-                    break;
-                }
+    /**
+     * 检查世界掉落出口是否可用。
+     * 如果有掉落输出需求且不是中心掉落模式，则需要掉落方向对面是空气。
+     * 此检查必须在消耗输入之前执行，避免物品被消耗后掉落被阻挡而丢失。
+     */
+    private static boolean canDropToWorld(
+            Map<String, NonNullList<ItemStack>> zoneOutputs,
+            Map<Direction, Set<String>> zoneFaceAccess,
+            Level level, BlockPos pos, boolean centerDrop) {
+        NonNullList<ItemStack> dropItems = zoneOutputs.get(SlotZone.DROP_OUTPUT.getName());
+        if (dropItems == null || dropItems.isEmpty()) return true; // 没有掉落需求
+        if (centerDrop) return true; // 中心掉落不需要检查出口
+
+        Direction dropDir = Direction.UP;
+        for (Direction dir : Direction.values()) {
+            if (zoneFaceAccess.getOrDefault(dir, Set.of()).contains(SlotZone.DROP_OUTPUT.getName())) {
+                dropDir = dir;
+                break;
             }
         }
-    }
 
-    private static void produceItemInZone(SlotZone zone, NonNullList<ItemStack> outputs,
-            SlotPartition partition, NonNullList<ItemStack> items) {
-        for (ItemStack output : outputs) {
-            if (!output.isEmpty()) {
-                insertItemInZone(zone, output.copy(), false, partition, items);
-            }
+        boolean canDrop = level.getBlockState(pos.relative(dropDir)).isAir();
+        if (!canDrop) {
+            MagicIO.LOGGER.trace("[{}] canDropToWorld: drop direction {} blocked", pos.toShortString(), dropDir);
         }
-    }
-
-    // ============ 流体相关 ============
-
-    public static boolean canFitFluid(SlotZone zone, FluidStack fluid,
-            SlotPartition partition, NonNullList<FluidStack> tanks, int tankCapacity) {
-        if (fluid.isEmpty() || tankCapacity <= 0) return false;
-        return insertFluidInZone(zone, fluid.copy(), true, partition, tanks, tankCapacity) >= fluid.getAmount();
-    }
-
-    private static boolean canFitFluidZoneOutputs(Map<String, NonNullList<FluidStack>> fluidOutputs,
-            SlotPartition partition, NonNullList<FluidStack> tanks, int tankCapacity) {
-        if (fluidOutputs.isEmpty()) return true;
-        if (tankCapacity <= 0) return false;
-        for (Map.Entry<String, NonNullList<FluidStack>> entry : fluidOutputs.entrySet()) {
-            SlotZone zone = partition.getZoneByName(entry.getKey());
-            if (zone == null) return false;
-            for (FluidStack fluid : entry.getValue()) {
-                if (!fluid.isEmpty() && !canFitFluid(zone, fluid, partition, tanks, tankCapacity)) {
-                    return false;
-                }
-            }
-        }
-        return true;
-    }
-
-    public static boolean canConsumeFluid(SlotZone zone, ZhenRecipe.FluidIngredient ingredient,
-            SlotPartition partition, NonNullList<FluidStack> tanks) {
-        if (ingredient == null || ingredient.amount() <= 0) return false;
-        for (int tank : partition.getSlots(ModIOTypes.FLUID.get(), zone)) {
-            if (ingredient.test(tanks.get(tank))) {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    private static boolean canConsumeAllFluids(ZhenRecipe recipe,
-            SlotPartition partition, NonNullList<FluidStack> tanks) {
-        for (RecipeInput<?> input : recipe.getInputs()) {
-            if (input.type() != ModIOTypes.FLUID.get()) continue;
-            SlotZone zone = partition.getZoneByName(input.zoneName());
-            if (zone == null) return false;
-            NonNullList<ZhenRecipe.FluidIngredient> ingredients =
-                    (NonNullList<ZhenRecipe.FluidIngredient>) input.requirement();
-            for (ZhenRecipe.FluidIngredient fluid : ingredients) {
-                if (!canConsumeFluid(zone, fluid, partition, tanks)) return false;
-            }
-        }
-        return true;
-    }
-
-    public static int insertFluidInZone(SlotZone zone, FluidStack fluid, boolean simulate,
-            SlotPartition partition, NonNullList<FluidStack> tanks, int tankCapacity) {
-        if (fluid.isEmpty() || tankCapacity <= 0) return 0;
-        int filled = 0;
-        FluidStack toFill = fluid.copy();
-
-        for (int tank : partition.getSlots(ModIOTypes.FLUID.get(), zone)) {
-            if (toFill.isEmpty()) break;
-            FluidStack existing = tanks.get(tank);
-            if (existing.isEmpty()) {
-                int canInsert = Math.min(toFill.getAmount(), tankCapacity);
-                if (!simulate) {
-                    tanks.set(tank, toFill.copyWithAmount(canInsert));
-                }
-                filled += canInsert;
-                toFill.shrink(canInsert);
-            } else if (FluidStack.isSameFluid(existing, toFill)) {
-                int canInsert = Math.min(toFill.getAmount(), tankCapacity - existing.getAmount());
-                if (canInsert > 0) {
-                    if (!simulate) {
-                        existing.grow(canInsert);
-                    }
-                    filled += canInsert;
-                    toFill.shrink(canInsert);
-                }
-            }
-        }
-        return filled;
-    }
-
-    private static void consumeFluidInZone(SlotZone zone,
-            NonNullList<ZhenRecipe.FluidIngredient> ingredients,
-            SlotPartition partition, NonNullList<FluidStack> tanks) {
-        for (ZhenRecipe.FluidIngredient ingredient : ingredients) {
-            for (int tank : partition.getSlots(ModIOTypes.FLUID.get(), zone)) {
-                FluidStack existing = tanks.get(tank);
-                if (ingredient.test(existing)) {
-                    int drained = Math.min(ingredient.amount(), existing.getAmount());
-                    existing.shrink(drained);
-                    if (existing.isEmpty()) {
-                        tanks.set(tank, FluidStack.EMPTY);
-                    }
-                    break;
-                }
-            }
-        }
-    }
-
-    private static void produceFluidInZone(SlotZone zone, NonNullList<FluidStack> fluids,
-            SlotPartition partition, NonNullList<FluidStack> tanks, int tankCapacity) {
-        if (tankCapacity <= 0) return;
-        for (FluidStack fluid : fluids) {
-            if (!fluid.isEmpty()) {
-                insertFluidInZone(zone, fluid.copy(), false, partition, tanks, tankCapacity);
-            }
-        }
+        return canDrop;
     }
 
     // ============ 世界掉落 ============
@@ -648,9 +585,9 @@ public class RecipeProcessor {
         } else {
             boolean canDrop = level.getBlockState(pos.relative(dropDir)).isAir();
             if (!canDrop) return;
-            WorldDropIOComponent dropComponent = new WorldDropIOComponent(level, pos, dropDir);
+            WorldDropSink dropComponent = new WorldDropSink(level, pos, dropDir);
             for (ItemStack stack : dropItems) {
-                dropComponent.produce(stack);
+                dropComponent.drop(stack);
             }
         }
     }

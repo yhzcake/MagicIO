@@ -17,11 +17,11 @@ import cn.yhzcake.magicio.block.zhen.ZhenTypes;
 import cn.yhzcake.magicio.block.zhenbus.ZhenBusBlockEntity;
 import cn.yhzcake.magicio.block.zhenbus.ModZhenBusBlocks;
 import cn.yhzcake.magicio.block.gridcell.CellAction;
-import cn.yhzcake.magicio.config.Config;
 import cn.yhzcake.magicio.io.AbstractSideProcessor;
 import cn.yhzcake.magicio.io.EnergyIOComponent;
 import cn.yhzcake.magicio.io.FluidIOComponent;
 import cn.yhzcake.magicio.io.IOType;
+import cn.yhzcake.magicio.io.IOTypeDescriptors;
 import cn.yhzcake.magicio.io.ItemIOComponent;
 import cn.yhzcake.magicio.io.LinkedFluidHandler;
 import cn.yhzcake.magicio.io.LinkedItemHandler;
@@ -35,9 +35,9 @@ import cn.yhzcake.magicio.item.crafting.ZhenRecipeManager;
 import cn.yhzcake.magicio.utils.ElementType;
 import cn.yhzcake.magicio.utils.ElementTypes;
 import cn.yhzcake.magicio.item.crafting.ForgeRecipeBridge;
+import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.core.component.DataComponents;
-import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.chat.Component;
@@ -54,13 +54,9 @@ import net.minecraft.world.item.CreativeModeTabs;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.component.CustomData;
-import net.minecraft.world.level.block.Blocks;
 import net.neoforged.bus.api.IEventBus;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.common.Mod;
-import net.neoforged.fml.loading.FMLEnvironment;
-import net.neoforged.fml.config.ModConfig;
-import net.neoforged.api.distmarker.Dist;
 import net.neoforged.fml.event.lifecycle.FMLCommonSetupEvent;
 import net.neoforged.neoforge.capabilities.BlockCapability;
 import net.neoforged.neoforge.capabilities.Capabilities;
@@ -79,6 +75,7 @@ import net.neoforged.neoforge.registries.DeferredRegister;
  */
 @Mod(MagicIO.MOD_ID)
 public class MagicIO {
+
     public static final String MOD_ID = "magic_io";
     public static final Logger LOGGER = LogUtils.getLogger();
 
@@ -105,7 +102,7 @@ public class MagicIO {
                 output.accept(GRID_CELL_PANEL_ITEM.get());
             }).build());
 
-    public MagicIO(IEventBus modEventBus, net.neoforged.fml.ModContainer modContainer) {
+    public MagicIO(IEventBus modEventBus) {
         ModDataComponents.register(modEventBus);
         modEventBus.register(ElementType.class);
         ElementTypes.register(modEventBus);
@@ -137,7 +134,6 @@ public class MagicIO {
         modEventBus.addListener(this::addCreative);
         modEventBus.addListener(this::registerCapabilities);
 
-        modContainer.registerConfig(ModConfig.Type.COMMON, Config.SPEC);
     }
 
     // ===== example_item 右键空气循环 side，右键 zhen_bus 安装处理器 =====
@@ -266,8 +262,12 @@ public class MagicIO {
                 Capabilities.Energy.BLOCK,
                 ModBlockEntities.ZHEN_BLOCK.get(),
                 (be, direction) -> {
-                    EnergyIOComponent energyComponent = ((AbstractZhenBlockEntity) be).getEnergyIOComponent();
-                    if (energyComponent == null) return null;
+                    if (direction == null) return null;
+                    AbstractZhenBlockEntity azbe = (AbstractZhenBlockEntity) be;
+                    Set<Integer> slots = azbe.getEnergyFaceAccess().get(direction);
+                    if (slots == null || slots.isEmpty()) return null;
+                    EnergyIOComponent energyComponent = azbe.getEnergyIOComponent();
+                    if (energyComponent == null || energyComponent.getCapacity() == 0) return null;
                     return energyComponent.getHandler();
                 }
         );
@@ -346,12 +346,10 @@ public class MagicIO {
                     if (direction == null) return null;
                     SideProcessor processor = be.getProcessor(direction);
                     if (processor == null) return null;
-                    if (ioType != ModIOTypes.ENERGY.get()) {
-                        Map<IOType, Set<Integer>> access = processor.getFaceAccess(direction);
-                        if (access == null) return null;
-                        Set<Integer> slots = access.get(ioType);
-                        if (slots == null || slots.isEmpty()) return null;
-                    }
+                    Map<IOType, Set<Integer>> access = processor.getFaceAccess(direction);
+                    if (access == null) return null;
+                    Set<Integer> slots = access.get(ioType);
+                    if (slots == null || slots.isEmpty()) return null;
                     Object component = processor.getIOProcessor().get(ioType);
                     if (component == null) return null;
                     return handlerFactory.apply(component);
@@ -361,22 +359,37 @@ public class MagicIO {
 
     /** 注册自定义网络数据包 */
     private void registerPayloads(net.neoforged.neoforge.network.event.RegisterPayloadHandlersEvent event) {
-        var registrar = event.registrar(MOD_ID);
+        var registrar = event.registrar(MOD_ID).versioned("1");
         registrar.playToClient(
-                cn.yhzcake.magicio.network.ZhenRecipeSyncPayload.TYPE,
-                cn.yhzcake.magicio.network.ZhenRecipeSyncPayload.STREAM_CODEC,
-                cn.yhzcake.magicio.network.ZhenRecipeSyncPayload::handle
+                cn.yhzcake.magicio.network.ZhenRecipeRevisionPayload.TYPE,
+                cn.yhzcake.magicio.network.ZhenRecipeRevisionPayload.STREAM_CODEC,
+                cn.yhzcake.magicio.network.ZhenRecipeRevisionPayload::handle
         );
-        LOGGER.info("Registered zhen_recipe_sync network payload");
+        registrar.playToServer(
+                cn.yhzcake.magicio.network.ZhenRecipeCatalogRequestPayload.TYPE,
+                cn.yhzcake.magicio.network.ZhenRecipeCatalogRequestPayload.STREAM_CODEC,
+                cn.yhzcake.magicio.network.ZhenRecipeNetworkSync::handleCatalogRequest
+        );
+        registrar.playToClient(
+                cn.yhzcake.magicio.network.ZhenRecipeCatalogPayload.TYPE,
+                cn.yhzcake.magicio.network.ZhenRecipeCatalogPayload.STREAM_CODEC,
+                cn.yhzcake.magicio.network.ZhenRecipeNetworkSync::handleCatalog
+        );
+        registrar.playToServer(
+                cn.yhzcake.magicio.network.ZhenRecipeDetailRequestPayload.TYPE,
+                cn.yhzcake.magicio.network.ZhenRecipeDetailRequestPayload.STREAM_CODEC,
+                cn.yhzcake.magicio.network.ZhenRecipeNetworkSync::handleDetailRequest
+        );
+        registrar.playToClient(
+                cn.yhzcake.magicio.network.ZhenRecipeDetailPayload.TYPE,
+                cn.yhzcake.magicio.network.ZhenRecipeDetailPayload.STREAM_CODEC,
+                cn.yhzcake.magicio.network.ZhenRecipeNetworkSync::handleDetail
+        );
+        LOGGER.info("Registered zhen recipe network payloads");
     }
 
     private void commonSetup(FMLCommonSetupEvent event) {
-        LOGGER.info("HELLO FROM COMMON SETUP");
-        if (Config.LOG_DIRT_BLOCK.getAsBoolean()) {
-            LOGGER.info("DIRT BLOCK >> {}", BuiltInRegistries.BLOCK.getKey(Blocks.DIRT));
-        }
-        LOGGER.info("{}{}", Config.MAGIC_NUMBER_INTRODUCTION.get(), Config.MAGIC_NUMBER.getAsInt());
-        Config.ITEM_STRINGS.get().forEach((item) -> LOGGER.info("ITEM >> {}", item));
+        event.enqueueWork(IOTypeDescriptors::registerBuiltin);
     }
 
     private void addCreative(BuildCreativeModeTabContentsEvent event) {
@@ -389,17 +402,23 @@ public class MagicIO {
     public void onServerStarting(ServerStartingEvent event) {
         var server = event.getServer();
         loadRecipesToManager(server.getResourceManager(), server);
-        // 向已连接的玩家广播（ServerStartingEvent 时可能已有玩家）
-        syncRecipesToAll();
     }
 
     @SubscribeEvent
     public void onPlayerLogin(net.neoforged.neoforge.event.entity.player.PlayerEvent.PlayerLoggedInEvent event) {
         var entity = event.getEntity();
-        if (!(entity instanceof net.minecraft.server.level.ServerPlayer)) return;
-        // 延迟到主线程执行，广播给所有在线玩家（含刚登录的这位）
-        var server = entity.level().getServer();
-        server.execute(MagicIO::syncRecipesToAll);
+        if (!(entity instanceof net.minecraft.server.level.ServerPlayer player)) return;
+        var revision = ZhenRecipeManager.getInstance().getRevision();
+        net.neoforged.neoforge.network.PacketDistributor.sendToPlayer(player,
+                new cn.yhzcake.magicio.network.ZhenRecipeRevisionPayload(
+                        cn.yhzcake.magicio.network.ZhenRecipeNetworkSync.PROTOCOL_VERSION, revision));
+    }
+
+    @SubscribeEvent
+    public void onPlayerLogout(net.neoforged.neoforge.event.entity.player.PlayerEvent.PlayerLoggedOutEvent event) {
+        if (event.getEntity() instanceof net.minecraft.server.level.ServerPlayer player) {
+            cn.yhzcake.magicio.network.ZhenRecipeNetworkSync.clearServerRequestState(player.getUUID());
+        }
     }
 
     @SubscribeEvent
@@ -415,23 +434,25 @@ public class MagicIO {
 
         @Override
         protected void apply(Void data, ResourceManager resourceManager, ProfilerFiller profiler) {
-            if (FMLEnvironment.getDist() == Dist.CLIENT) return;
             MinecraftServer server = net.neoforged.neoforge.server.ServerLifecycleHooks.getCurrentServer();
             if (server == null || !server.isRunning()) return;
             loadRecipesToManager(resourceManager, server);
-            syncRecipesToAll();
+            net.neoforged.neoforge.network.PacketDistributor.sendToAllPlayers(
+                    new cn.yhzcake.magicio.network.ZhenRecipeRevisionPayload(
+                            cn.yhzcake.magicio.network.ZhenRecipeNetworkSync.PROTOCOL_VERSION,
+                            ZhenRecipeManager.getInstance().getRevision()));
         }
     }
 
     private static void loadRecipesToManager(ResourceManager resourceManager, MinecraftServer server) {
-        ZhenRecipeManager.getInstance().clearRecipes();
+        ZhenRecipeManager.getInstance().beginReload();
         Map<Identifier, Resource> resources = resourceManager.listResources(
             "recipe",
             (path) -> path.getPath().endsWith(".json") && path.getNamespace().equals(MagicIO.MOD_ID)
         );
         for (Map.Entry<Identifier, Resource> entry : resources.entrySet()) {
             try (InputStream inputStream = entry.getValue().open()) {
-                ZhenRecipe recipe = ZhenRecipeLoader.loadRecipeFromJson(inputStream, server);
+                ZhenRecipe recipe = ZhenRecipeLoader.loadRecipeFromJson(entry.getKey(), inputStream, server);
                 if (recipe != null) {
                     ZhenRecipeManager.getInstance().addRecipe(recipe);
                 }
@@ -441,14 +462,9 @@ public class MagicIO {
         }
         // 注入熔炉配方桥接
         ForgeRecipeBridge.injectFurnaceRecipes(server);
+        ZhenRecipeManager.getInstance().finishReload();
+        cn.yhzcake.magicio.network.ZhenRecipeNetworkSync.publishServerSnapshot();
         LOGGER.info("Loaded {} recipes into ZhenRecipeManager", ZhenRecipeManager.getInstance().getRecipeCount());
     }
 
-    private static void syncRecipesToAll() {
-        var recipes = ZhenRecipeManager.getInstance().getAllRecipes();
-        if (recipes.isEmpty()) return;
-        var payload = new cn.yhzcake.magicio.network.ZhenRecipeSyncPayload(recipes);
-        net.neoforged.neoforge.network.PacketDistributor.sendToAllPlayers(payload);
-        LOGGER.info("Synced {} recipes to all online players", recipes.size());
-    }
 }

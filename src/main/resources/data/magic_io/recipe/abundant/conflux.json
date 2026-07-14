@@ -2,11 +2,25 @@
   "type": "magic_io:zhen_block",
   "zhen_type": "magic_io:abundant_conflux_zhen",
   "inputs": {
-    "item_input_all": [{"item": "minecraft:stone", "count": 1}]
+    "item_input_all": [
+      {
+        "count": 1,
+        "item": "minecraft:stone"
+      }
+    ]
   },
   "outputs": {
-    "item_output_all": [{"item": "minecraft:cobblestone", "count": 8}],
-    "drop_output": [{"loot_table": "magic_io:ore_attract"}]
+    "item_output_all": [
+      {
+        "item": "minecraft:cobblestone",
+        "count": 8
+      }
+    ],
+    "drop_output": [
+      {
+        "loot_table": "magic_io:ore_attract"
+      }
+    ]
   },
   "processing_time": 200
 }

@@ -1,16 +1,15 @@
 package cn.yhzcake.magicio.item.crafting;
 
-import net.minecraft.world.item.ItemStack;
-import net.minecraft.core.NonNullList;
 import net.minecraft.world.level.Level;
 
 import java.util.ArrayList;
-import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
 import cn.yhzcake.magicio.block.inventory.SlotPartition;
 import cn.yhzcake.magicio.block.zhen.ZhenLevel;
+import cn.yhzcake.magicio.io.IOProcessor;
 
 /**
  * 配方管理器。
@@ -18,19 +17,21 @@ import cn.yhzcake.magicio.block.zhen.ZhenLevel;
  * 一个配方可被同一功能的所有等级复用，处理时根据实际等级动态计算倍率。</p>
  */
 public class ZhenRecipeManager {
-    private static ZhenRecipeManager INSTANCE;
-    /** key = 功能基础名（如 "cinder"），value = 该功能的所有配方 */
-    private final Map<String, List<ZhenRecipe>> recipesByBaseName;
+    private static final ZhenRecipeManager SERVER_INSTANCE = new ZhenRecipeManager();
+    private static final ZhenRecipeManager CLIENT_INSTANCE = new ZhenRecipeManager();
+    private volatile Snapshot snapshot = Snapshot.empty();
+    private Map<String, List<ZhenRecipe>> reloadRecipes;
+    private boolean loaded;
 
     private ZhenRecipeManager() {
-        this.recipesByBaseName = new HashMap<>();
     }
 
     public static ZhenRecipeManager getInstance() {
-        if (INSTANCE == null) {
-            INSTANCE = new ZhenRecipeManager();
-        }
-        return INSTANCE;
+        return SERVER_INSTANCE;
+    }
+
+    public static ZhenRecipeManager getClientInstance() {
+        return CLIENT_INSTANCE;
     }
 
     /** 提取配方对应的基础名（去掉等级前缀和 _zhen 后缀） */
@@ -59,40 +60,121 @@ public class ZhenRecipeManager {
     }
 
     /** 添加配方，自动按基础名归类 */
-    public void addRecipe(ZhenRecipe recipe) {
+    public synchronized void addRecipe(ZhenRecipe recipe) {
         String key = baseName(recipe);
-        recipesByBaseName.computeIfAbsent(key, k -> new ArrayList<>()).add(recipe);
+        Map<String, List<ZhenRecipe>> target = reloadRecipes;
+        if (target == null) {
+            target = mutableCopy(snapshot.recipesByBaseName());
+            target.computeIfAbsent(key, ignored -> new ArrayList<>()).add(recipe);
+            snapshot = Snapshot.create(snapshot.revision(), target);
+            return;
+        }
+        target.computeIfAbsent(key, ignored -> new ArrayList<>()).add(recipe);
     }
 
     public int getRecipeCount() {
-        return recipesByBaseName.values().stream().mapToInt(List::size).sum();
+        return snapshot.allRecipes().size();
     }
 
     /** 按基础名查找配方 */
     public List<ZhenRecipe> getRecipes(String zhenType) {
-        return recipesByBaseName.getOrDefault(baseName(zhenType), List.of());
+        return snapshot.recipesByBaseName().getOrDefault(baseName(zhenType), List.of());
     }
 
     /** 获取所有已注册的配方 */
     public List<ZhenRecipe> getAllRecipes() {
-        return recipesByBaseName.values().stream()
-                .flatMap(List::stream)
-                .toList();
+        return snapshot.allRecipes();
     }
 
-    /** 查找匹配的配方 */
-    public ZhenRecipe findRecipe(String zhenType, NonNullList<ItemStack> allItems, SlotPartition partition, Level level) {
-        List<ZhenRecipe> candidates = recipesByBaseName.get(baseName(zhenType));
+    public ZhenRecipe getRecipe(net.minecraft.resources.Identifier recipeId) {
+        return snapshot.recipesById().get(recipeId);
+    }
+
+    /** 查找匹配的配方（在遍历候选时同步检查等级，避免高等级配方遮挡低等级配方） */
+    public ZhenRecipe findRecipe(String zhenType, IOProcessor ioProcessor, SlotPartition partition, Level level) {
+        List<ZhenRecipe> candidates = snapshot.recipesByBaseName().get(baseName(zhenType));
         if (candidates == null) return null;
         for (ZhenRecipe recipe : candidates) {
-            if (recipe.matches(allItems, partition, level)) {
+            if (recipe.matchesAll(ioProcessor, partition, level)
+                    && RecipeProcessor.isRecipeLevelAllowed(recipe, zhenType)) {
                 return recipe;
             }
         }
         return null;
     }
 
-    public void clearRecipes() {
-        recipesByBaseName.clear();
+    public synchronized void clearRecipes() {
+        snapshot = Snapshot.create(snapshot.revision() + 1, Map.of());
+        reloadRecipes = null;
+    }
+
+    public synchronized void beginReload() {
+        loaded = false;
+        reloadRecipes = new LinkedHashMap<>();
+    }
+
+    public synchronized void finishReload() {
+        if (reloadRecipes != null) {
+            snapshot = Snapshot.create(snapshot.revision() + 1, reloadRecipes);
+            reloadRecipes = null;
+        }
+        loaded = true;
+    }
+
+    public boolean isLoaded() {
+        return loaded;
+    }
+
+    /**
+     * 仅清空配方缓存但不递增版本号（用于客户端断开连接时清理展示数据）。
+     * 避免在客户端侧修改全局版本号影响服务端判断。
+     */
+    public synchronized void clearClientCache() {
+        snapshot = Snapshot.empty();
+    }
+
+    public static int getRecipeGeneration() {
+        return Math.toIntExact(Math.min(Integer.MAX_VALUE, SERVER_INSTANCE.snapshot.revision()));
+    }
+
+    public long getRevision() {
+        return snapshot.revision();
+    }
+
+    public synchronized void replaceClientSnapshot(long revision, List<ZhenRecipe> recipes) {
+        Map<String, List<ZhenRecipe>> grouped = new LinkedHashMap<>();
+        for (ZhenRecipe recipe : recipes) {
+            grouped.computeIfAbsent(baseName(recipe), ignored -> new ArrayList<>()).add(recipe);
+        }
+        snapshot = Snapshot.create(revision, grouped);
+    }
+
+    private static Map<String, List<ZhenRecipe>> mutableCopy(Map<String, List<ZhenRecipe>> source) {
+        Map<String, List<ZhenRecipe>> copy = new LinkedHashMap<>();
+        source.forEach((key, value) -> copy.put(key, new ArrayList<>(value)));
+        return copy;
+    }
+
+    private record Snapshot(long revision, Map<String, List<ZhenRecipe>> recipesByBaseName,
+            Map<net.minecraft.resources.Identifier, ZhenRecipe> recipesById, List<ZhenRecipe> allRecipes) {
+
+        private static Snapshot empty() {
+            return new Snapshot(0, Map.of(), Map.of(), List.of());
+        }
+
+        private static Snapshot create(long revision, Map<String, List<ZhenRecipe>> source) {
+            Map<String, List<ZhenRecipe>> grouped = new LinkedHashMap<>();
+            Map<net.minecraft.resources.Identifier, ZhenRecipe> byId = new LinkedHashMap<>();
+            List<ZhenRecipe> all = new ArrayList<>();
+            source.forEach((key, value) -> {
+                List<ZhenRecipe> immutable = List.copyOf(value);
+                grouped.put(key, immutable);
+                for (ZhenRecipe recipe : immutable) {
+                    byId.put(recipe.getRecipeId(), recipe);
+                    all.add(recipe);
+                }
+            });
+            return new Snapshot(revision, Map.copyOf(grouped), Map.copyOf(byId), List.copyOf(all));
+        }
     }
 }

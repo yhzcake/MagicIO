@@ -65,9 +65,6 @@ public class EnergyIOComponent implements IOComponent<Object, Integer> {
     }
 
     @Override
-    public void consume(int slot, Object requirement) {}
-
-    @Override
     public void saveNBT(ValueOutput output) {
         handler.serialize(output);
     }

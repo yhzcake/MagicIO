@@ -5,6 +5,8 @@ import cn.yhzcake.magicio.block.ModBlocks;
 import cn.yhzcake.magicio.block.zhen.ZhenLevel;
 import cn.yhzcake.magicio.io.ModIOTypes;
 import cn.yhzcake.magicio.item.crafting.OutputEntry;
+import cn.yhzcake.magicio.item.crafting.ItemRequirement;
+import cn.yhzcake.magicio.item.crafting.FluidRequirement;
 import cn.yhzcake.magicio.item.crafting.RecipeInput;
 import cn.yhzcake.magicio.item.crafting.RecipeOutput;
 import cn.yhzcake.magicio.item.crafting.ZhenRecipe;
@@ -24,7 +26,6 @@ import net.minecraft.core.NonNullList;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.Identifier;
 import net.minecraft.world.item.ItemStack;
-import net.minecraft.world.item.crafting.Ingredient;
 import net.neoforged.neoforge.fluids.FluidStack;
 
 import java.util.*;
@@ -80,7 +81,7 @@ public class ZhenRecipeCategory implements IRecipeCategory<ZhenRecipe> {
 
     @Override
     public Identifier getIdentifier(ZhenRecipe recipe) {
-        return Identifier.fromNamespaceAndPath(MagicIO.MOD_ID, recipe.getZhenTypeId().getPath());
+        return recipe.getRecipeId();
     }
 
     @SuppressWarnings("unchecked")
@@ -88,27 +89,30 @@ public class ZhenRecipeCategory implements IRecipeCategory<ZhenRecipe> {
     public void setRecipe(IRecipeLayoutBuilder builder, ZhenRecipe recipe, IFocusGroup focuses) {
         // ===== 第一行：物品输入 → 流体输入（从左向右）=====
         int cx = 1;
-        NonNullList<Ingredient> itemIngredients = recipe.getIngredients();
-        int nIn = Math.min(itemIngredients.size(), 3);
-        for (int i = 0; i < nIn; i++) {
-            builder.addInputSlot(cx, INPUT_Y).add(itemIngredients.get(i)).setStandardSlotBackground();
+        NonNullList<ItemRequirement> itemRequirements = recipe.getItemRequirements();
+        for (int i = 0; i < itemRequirements.size(); i++) {
+            ItemRequirement requirement = itemRequirements.get(i);
+            var slot = builder.addInputSlot(cx, INPUT_Y).add(requirement.ingredient()).setStandardSlotBackground();
+            if (requirement.count() > 1) {
+                slot.setOverlay(createCountOverlay(requirement.count()), 0, 0);
+            }
             cx += SLOT;
         }
-        if (nIn > 0) cx += 2;
+        if (!itemRequirements.isEmpty()) cx += 2;
 
         for (RecipeInput<?> input : recipe.getInputs()) {
             if (input.type() == ModIOTypes.FLUID.get()) {
-                NonNullList<ZhenRecipe.FluidIngredient> fluids =
-                        (NonNullList<ZhenRecipe.FluidIngredient>) input.requirement();
+                NonNullList<FluidRequirement> fluids =
+                        (NonNullList<FluidRequirement>) input.requirement();
                 for (var fi : fluids) {
                     int amount = fi.amount();
+                    var slot = builder.addSlot(RecipeIngredientRole.INPUT, cx, INPUT_Y)
+                            .setFluidRenderer(amount, false, FLUID_SIZE, FLUID_SIZE)
+                            .setStandardSlotBackground();
                     for (var holder : fi.fluids()) {
-                        builder.addSlot(RecipeIngredientRole.INPUT, cx, INPUT_Y)
-                                .add(holder.value(), amount)
-                                .setFluidRenderer(amount, false, FLUID_SIZE, FLUID_SIZE)
-                                .setStandardSlotBackground();
-                        cx += SLOT;
+                        slot.add(holder.value(), amount);
                     }
+                    cx += SLOT;
                 }
             }
         }
@@ -130,9 +134,10 @@ public class ZhenRecipeCategory implements IRecipeCategory<ZhenRecipe> {
             }
         }
         NonNullList<ItemStack> itemOutputs = recipe.getFixedOutputs();
-        if (!itemOutputs.isEmpty()) {
+        for (int i = itemOutputs.size() - 1; i >= 0; i--) {
             builder.addSlot(RecipeIngredientRole.OUTPUT, rx, INPUT_Y)
-                    .addItemStacks(itemOutputs).setStandardSlotBackground();
+                    .addItemStacks(List.of(itemOutputs.get(i))).setStandardSlotBackground();
+            rx -= SLOT;
         }
 
         // ===== 战利品表槽位（全部放置，由 ScrollGrid 接管滚动）=====
@@ -148,6 +153,27 @@ public class ZhenRecipeCategory implements IRecipeCategory<ZhenRecipe> {
                 for (var line : li.tooltipLines()) t.add(line);
             });
         }
+    }
+
+    private static IDrawable createCountOverlay(int count) {
+        String text = Integer.toString(count);
+        return new IDrawable() {
+            @Override
+            public int getWidth() {
+                return 16;
+            }
+
+            @Override
+            public int getHeight() {
+                return 16;
+            }
+
+            @Override
+            public void draw(GuiGraphicsExtractor guiGraphics, int xOffset, int yOffset) {
+                var font = Minecraft.getInstance().font;
+                guiGraphics.text(font, text, xOffset + 17 - font.width(text), yOffset + 9, 0xFFFFFFFF, true);
+            }
+        };
     }
 
     @Override

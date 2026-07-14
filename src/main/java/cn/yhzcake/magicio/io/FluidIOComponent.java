@@ -72,7 +72,7 @@ public class FluidIOComponent implements IOComponent<Object, FluidStack> {
         if (value.isEmpty() || tankCapacity == null) return false;
         FluidStack existing = tanks.get(slot);
         if (existing.isEmpty()) return tankCapacity >= value.getAmount();
-        if (FluidStack.isSameFluid(existing, value)) {
+        if (FluidDescriptor.isSameFluidAndComponents(existing, value)) {
             return existing.getAmount() + value.getAmount() <= tankCapacity;
         }
         return false;
@@ -127,7 +127,8 @@ public class FluidIOComponent implements IOComponent<Object, FluidStack> {
 
     @Override
     public FluidStack insert(int slot, FluidStack value, boolean simulate) {
-        if (value.isEmpty() || tankCapacity == null) return FluidStack.EMPTY;
+        if (value.isEmpty()) return FluidStack.EMPTY;
+        if (tankCapacity == null) return value.copy();
         FluidStack existing = tanks.get(slot);
         if (existing.isEmpty()) {
             int canInsert = Math.min(value.getAmount(), tankCapacity);
@@ -139,7 +140,7 @@ public class FluidIOComponent implements IOComponent<Object, FluidStack> {
             result.shrink(canInsert);
             return result.isEmpty() ? FluidStack.EMPTY : result;
         }
-        if (FluidStack.isSameFluid(existing, value)) {
+        if (FluidDescriptor.isSameFluidAndComponents(existing, value)) {
             int canInsert = Math.min(value.getAmount(), tankCapacity - existing.getAmount());
             if (canInsert > 0) {
                 if (!simulate) {
@@ -168,50 +169,17 @@ public class FluidIOComponent implements IOComponent<Object, FluidStack> {
     public int insertFluid(SlotZone zone, FluidStack fluid, boolean simulate) {
         if (fluid.isEmpty() || tankCapacity == null) return 0;
 
-        int filled = 0;
-        FluidStack toFill = fluid.copy();
-
-        for (int tank : partition.getSlots(ModIOTypes.FLUID.get(), zone)) {
-            if (toFill.isEmpty()) break;
-            FluidStack existing = tanks.get(tank);
-            if (existing.isEmpty()) {
-                int canInsert = Math.min(toFill.getAmount(), tankCapacity);
-                if (!simulate) {
-                    tanks.set(tank, toFill.copyWithAmount(canInsert));
-                    notifyChanged();
-                }
-                filled += canInsert;
-                toFill.shrink(canInsert);
-            } else if (FluidStack.isSameFluid(existing, toFill)) {
-                int canInsert = Math.min(toFill.getAmount(), tankCapacity - existing.getAmount());
-                if (canInsert > 0) {
-                    if (!simulate) {
-                        existing.grow(canInsert);
-                        notifyChanged();
-                    }
-                    filled += canInsert;
-                    toFill.shrink(canInsert);
-                }
+        if (simulate) {
+            NonNullList<FluidStack> copy = NonNullList.withSize(tanks.size(), FluidStack.EMPTY);
+            for (int i = 0; i < tanks.size(); i++) {
+                if (!tanks.get(i).isEmpty()) copy.set(i, tanks.get(i).copy());
             }
+            return FluidDescriptor.insertFluid(copy, zone, fluid.copy(), partition, tankCapacity);
         }
 
+        int filled = FluidDescriptor.insertFluid(tanks, zone, fluid.copy(), partition, tankCapacity);
+        if (filled > 0) notifyChanged();
         return filled;
-    }
-
-    // ===== 消耗 =====
-
-    @Override
-    public void consume(int slot, Object requirement) {
-    }
-
-    @SuppressWarnings("unused")
-    public void consumeFluid(SlotZone zone, NonNullList<Object> ingredients) {
-        for (Object ingredient : ingredients) {
-            for (int tank : partition.getSlots(ModIOTypes.FLUID.get(), zone)) {
-                // populated by ZhenRecipe.FluidIngredient
-                extract(tank, 1, false);
-            }
-        }
     }
 
     // ===== 产出 =====

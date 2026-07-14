@@ -227,20 +227,27 @@ DOWN -> OUTPUT_ALL (输出区域)
 **变更说明：**
 
 - 从JSON文件加载配方
-- 支持两种输入格式：数组（所有输入）或对象（分区输入）
-- 支持两种输出格式：数组（所有输出）或对象（分区输出）
+- 输入和输出按槽位分区组织
+- 物品输入的 `item` 字段使用标准 Ingredient 格式并显式声明数量
 - 支持战利品表验证和加载
 
 **JSON格式示例：**
 
 ```json
 {
-  "type": "small_sift_zhen",
-  "inputs": [{"item": "minecraft:gravel"}],
-  "outputs": [
-    {"item": "minecraft:flint"},
-    {"loot_table": "minecraft:gameplay/hero_of_the_village/flint_giver"}
-  ],
+  "type": "magic_io:zhen_block",
+  "zhen_type": "magic_io:unstable_sieve_zhen",
+  "inputs": {
+    "item_input_all": [
+      {"item": "minecraft:gravel", "count": 1}
+    ]
+  },
+  "outputs": {
+    "item_output_all": [
+      {"item": "minecraft:flint", "count": 1},
+      {"loot_table": "minecraft:gameplay/hero_of_the_village/flint_giver"}
+    ]
+  },
   "processing_time": 100
 }
 ```
@@ -294,7 +301,6 @@ DOWN -> OUTPUT_ALL (输出区域)
 - 监听资源重载事件
 - 自动加载所有包含"sift"的配方文件
 
-**注意：** 当前实现调用了已弃用的 `loadRecipeFromJson(InputStream)`方法，需要修复。
 
 ---
 
@@ -425,17 +431,12 @@ SMALL_SIFT_ZHEN = ZHEN_TYPES.register("small_sift_zhen",
 
 ### ⚠️ 潜在问题
 
-1. **已弃用方法调用**
-
-   - **位置：** `ZhenRecipeLoaderService.java:44`
-   - **问题：** 调用了已弃用的 `loadRecipeFromJson(InputStream)`方法
-   - **建议：** 使用 `loadRecipeFromJson(InputStream, MinecraftServer)`方法，传入server参数以启用战利品表验证
-2. **未实现的菜单**
+1. **未实现的菜单**
 
    - **位置：** `AbstractZhenBlockEntity.java:605-608`
    - **问题：** `createMenu()`方法抛出 `UnsupportedOperationException`
    - **建议：** 实现GUI菜单以支持玩家交互
-3. **空值处理**
+2. **空值处理**
 
    - **位置：** `ZhenTypes.java`, `ElementTypes.java`
    - **问题：** 虽然添加了空值检查，但注册表可能在初始化时为null

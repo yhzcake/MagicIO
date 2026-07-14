@@ -2,10 +2,20 @@
   "type": "magic_io:zhen_block",
   "zhen_type": "magic_io:stable_compact_zhen",
   "inputs": {
-    "item_input_all": [{"item": "minecraft:cobblestone", "count": 4}]
+    "item_input_all": [
+      {
+        "count": 4,
+        "item": "minecraft:cobblestone"
+      }
+    ]
   },
   "outputs": {
-    "item_output_all": [{"item": "minecraft:stone", "count": 4}]
+    "item_output_all": [
+      {
+        "item": "minecraft:stone",
+        "count": 4
+      }
+    ]
   },
   "processing_time": 100
 }
